@@ -1,9 +1,22 @@
 cycle:
-  number: 1
-  name: C1 Mock Chat Workspace And Interaction Protocol
+  number: 2
+  name: "C2 Codex Session Adapter"
   workflow_kind: build
   type: feature
-  status: completed
+  status: planning
+  started: "2026-05-05T16:00:00+08:00"
+  preset: tdd
+  previous_cycle: C1
+  context_sources:
+    - archives:C1
+    - knowledge
+    - design-spec
+    - architecture
+  summary: "Connect the validated VSP-Coder message manager and UI contract to real Codex sessions."
+  lessons:
+    - "Keep provider adapters behind the stable provider-independent message/event protocol."
+    - "Preserve mock/runtime separation so production adapter state cannot be confused with demo data."
+    - "Keep mobile context visible when approvals or navigation surfaces open."
   lifecycle_policy:
     reject:
       default_action: needs_revision
@@ -14,13 +27,3 @@ cycle:
     gates:
       acceptance: manual_qa
     auto_continue: true
-  context_sources:
-    - knowledge
-    - design-spec
-    - architecture
-  finished: "2026-05-05T08:01:00.479Z"
-  acceptance:
-    mode: manual
-    state: accepted
-    requested_at: "2026-05-05T08:00:43.892Z"
-    accepted_at: "2026-05-05T08:01:00.479Z"

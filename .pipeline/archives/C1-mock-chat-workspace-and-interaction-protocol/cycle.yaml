@@ -1,0 +1,26 @@
+cycle:
+  number: 1
+  name: C1 Mock Chat Workspace And Interaction Protocol
+  workflow_kind: build
+  type: feature
+  status: completed
+  lifecycle_policy:
+    reject:
+      default_action: needs_revision
+    accept:
+      next: complete
+    resume:
+      default_action: continue_current
+    gates:
+      acceptance: manual_qa
+    auto_continue: true
+  context_sources:
+    - knowledge
+    - design-spec
+    - architecture
+  finished: "2026-05-05T08:01:00.479Z"
+  acceptance:
+    mode: manual
+    state: accepted
+    requested_at: "2026-05-05T08:00:43.892Z"
+    accepted_at: "2026-05-05T08:01:00.479Z"

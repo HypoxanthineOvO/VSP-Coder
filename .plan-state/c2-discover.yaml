@@ -1,0 +1,34 @@
+phase: P1-discover
+language: zh-CN
+project: VSP-Coder
+cycle:
+  id: C2
+  name: Codex Session Adapter
+  workflow_kind: build
+  preset: tdd
+status: ready
+rounds_completed: 0
+minimum_rounds: 3
+context_sources:
+  - .pipeline/archives/C1-mock-chat-workspace-and-interaction-protocol/summary.md
+  - .pipeline/knowledge/knowledge.compact.md
+  - .pipeline/design-spec.md
+  - .pipeline/architecture.md
+known_context:
+  previous_cycle:
+    id: C1
+    release: v0.1.0
+    outcome: Accepted mock workbench and interaction protocol.
+    deferred:
+      - Real Codex runner/session adapter.
+      - Real OpenCode and Claude Code adapters.
+      - Persistent project/session discovery beyond mock store.
+      - Real file upload/resource opening.
+      - Session rename/context menu actions.
+  candidate_goal: >
+    Connect the validated VSP-Coder message manager and UI contract to real
+    Codex sessions while keeping provider adapters behind the shared protocol.
+open_questions:
+  - Which Codex integration path should C2 target first: app-server, exec-server, or an adapter abstraction that can swap between them?
+  - What is the minimum real-session path for acceptance: start session, send message, stream events, interrupt, or resume existing session?
+  - How should mock and production session stores be separated during C2 testing?
