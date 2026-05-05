@@ -1,0 +1,107 @@
+phase: P1-discover
+language: zh-CN
+project: VSP-Coder
+mode: interactive
+rounds_completed: 5
+minimum_rounds: 3
+status: in_progress
+known_context:
+  repository_state: greenfield
+  product_direction: >
+    VSP-Coder is a web-first remote conversation workspace for Codex, Claude Code,
+    and OpenCode. A backend message manager should be the only direct owner of
+    backend CLI/process sessions; browser windows talk to the message manager.
+  architecture_principles:
+    - Web App first; Electron and VSCode extension are future shells over the same API.
+    - Start with a unified message protocol and mock backend before integrating real Codex sessions.
+    - Treat multiple windows as clients of one backend message manager, not direct CLI peers.
+    - Preserve one driver/owner path to backend CLI processes to avoid interrupt and stdin races.
+    - C1 must validate multiple browser windows and mobile-sized interaction surfaces.
+    - Mock data and production data must be physically/logically isolated while sharing the same public API contract.
+    - Approval cards should appear only when needed, as contextual inline cards or transient overlays, not as a permanently reserved layout band.
+    - The desktop right sidebar must reserve a first-class Hypo-Workflow surface that can read `.pipeline/` and `.plan-state/`.
+    - Mobile session/project switching should be reachable from the top bar rather than a separate bottom sheet in C1.
+    - Project-local workflow files can be read by the backend from whichever project folder is active, but the API must enforce project-root confinement.
+    - Skills and slash commands must be renderable as first-class UI/content objects rather than treated as plain terminal text.
+    - Skill and command mentions begin as composer/message structured tokens with autocomplete; execution is considered only after the composed message is sent to the active backend/session.
+  ui_reference:
+    desktop:
+      - Left global sidebar for backend/profile/model/project/recent navigation.
+      - Left project session sidebar for project status and session list.
+      - Main center for message stream and send area.
+      - Right sidebar for contextual surfaces including Hypo-Workflow, files, preview, events, and cost/status.
+    mobile:
+      - Top bar owns current session identity and switching entry.
+      - Message stream and fixed bottom composer are primary.
+      - Sidebar-style navigation can be opened from the top bar when switching project/session.
+  composer_actions:
+    include:
+      - upload_image_mock
+      - upload_file_mock
+      - kill_with_confirmation_mock
+      - switch_model_mock
+      - clear_queue_mock
+    defer_or_drop:
+      - generate_report_action
+  skill_command_rendering:
+    composer_behavior:
+      - Autocomplete skills, slash commands, files, and project commands while typing.
+      - Insert selected item as a structured token/chip in the message draft.
+      - Sending the message preserves token metadata for the backend adapter.
+    message_behavior:
+      - Render skill and command mentions as clickable chips/cards inside the conversation.
+      - Clicking a chip opens a detail/preview panel; it should not directly execute the command in C1.
+      - File and skill previews only need a clear preview surface in C1; full rendering can be deferred.
+    first_version_preview_scope:
+      - explicit preview panel or right-sidebar detail view
+      - metadata and path display
+      - placeholder preview body for complex formats
+  runner_controls:
+    clear_queue: "Clear pending outbound queued messages only; do not affect the running session."
+    kill: "Interrupt the current runner/session; require confirmation and write an event."
+  multi_user_findings:
+    codex_local_capabilities:
+      - "Codex CLI stores auth/session/config under the executing user's `~/.codex`."
+      - Local CLI exposes `app-server`, `exec-server`, and `mcp-server` commands.
+      - "`codex app-server` supports stdio, unix socket, and websocket listeners with auth modes for non-loopback websocket endpoints."
+    design_implication: >
+      A system-level VSP-Coder control plane should not run all Codex work as one shared service user.
+      It should either run per-user runner processes under each OS user or connect to a runner already
+      started inside that user's login/session context. C1 should keep auth mocked but preserve userId,
+      homeRoot, projectRoot, and runnerOwner fields in the API.
+  proposed_cycles:
+    - id: C1
+      name: Mock Chat Workspace And Interaction Protocol
+      purpose: >
+        Deliver a usable chat UI with backend-managed mock conversations, cards,
+        settings interactions, manual QA flow, and message/event protocol validation.
+    - id: C2
+      name: Codex Session Adapter
+      purpose: >
+        Connect the validated message manager and UI to real Codex sessions.
+  validation_intent:
+    C1: >
+      A user sends a test trigger such as "开始测试"; the mock backend emits all
+      planned interaction types. The user manually clicks through cards and controls,
+      then reports pass/fail before acceptance.
+    C2: >
+      Validate real Codex connection separately so defects can be attributed to the
+      adapter/CLI integration rather than the message manager or UI protocol.
+unresolved_questions:
+  - C1 scope boundary and exact interaction inventory.
+  - Single-user local service versus multi-user auth model for first implementation.
+  - Manual QA report format and acceptance gate.
+  - Whether Hypo-Workflow sidebar reads real files in C1 or uses mock fixtures behind the final API.
+  - Exact composer attachment/action menu semantics.
+  - Exact Skill/Command autocomplete inventory and metadata schema.
+  - Whether multi-user runner support should be deferred until after Codex C2 or introduced as an architecture-only contract in C1.
+research_findings:
+  stack_direction: TypeScript-first web app and server.
+  reasons:
+    - Codex exposes a server-side TypeScript SDK and an app-server JSON-RPC protocol suitable for rich product integrations.
+    - OpenCode exposes a headless HTTP/OpenAPI server, JS/TS SDK, SSE events, web UI, and TUI/server split.
+    - Claude Agent SDK supports TypeScript and Python; TypeScript SDK bundles a native Claude Code binary and hooks support HTTP/custom UI flows.
+  implementation_bias:
+    - Use Node.js for the VSP-Coder daemon instead of Rust/Go for C1-C2.
+    - Keep backend adapters behind a stable internal message/event protocol.
+    - Use SQLite or file-backed storage for C1 mock runtime, isolated from future production adapter state.

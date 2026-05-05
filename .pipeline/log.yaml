@@ -1,0 +1,25 @@
+entries:
+  -
+    id: RELEASE-v0.1.0-20260505T080414Z
+    type: release
+    ref: v0.1.0
+    status: completed
+    timestamp: "2026-05-05T08:04:14Z"
+    summary: VSP-Coder v0.1.0 release prepared after C1 acceptance, documentation update, sync repair, and regression checks.
+    trigger: manual
+  -
+    id: CYCLE-ACCEPTED-C1-20260505T080100Z
+    type: cycle_accept
+    ref: C1
+    status: completed
+    timestamp: "2026-05-05T08:01:00.479Z"
+    summary: Cycle C1 accepted.
+    trigger: manual
+  -
+    id: CYCLE-PENDING-C1-20260505T080043Z
+    type: cycle_pending_acceptance
+    ref: C1
+    status: pending_acceptance
+    timestamp: "2026-05-05T08:00:43.892Z"
+    summary: Cycle C1 completed through consolidated manual implementation and is pending user acceptance.
+    trigger: manual

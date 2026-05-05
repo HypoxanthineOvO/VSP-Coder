@@ -1,0 +1,232 @@
+phase: P2-decompose
+language: zh-CN
+project: VSP-Coder
+cycle:
+  id: C1
+  name: Mock Chat Workspace And Interaction Protocol
+  workflow_kind: build
+  preset: tdd
+status: pending_user_confirmation
+milestones:
+  - id: M01
+    name: App Shell, Layout, And Mock Runtime Contract
+    objective: >
+      Create the TypeScript app foundation with desktop/mobile layout regions,
+      a backend mock runtime contract, isolated storage scaffolding, and a first
+      visible session workspace.
+    implementation_scope:
+      - TypeScript monorepo setup for frontend and backend.
+      - React/Vite desktop layout matching the reference regions.
+      - Mobile top-bar/current-session layout baseline.
+      - Node backend with typed VSP protocol models and mock endpoints.
+      - Isolated mock storage namespace that cannot be confused with future production adapter data.
+    validation:
+      - App starts locally with one command.
+      - Desktop shows global sidebar, project/session sidebar, message workspace, composer, and right sidebar.
+      - Mobile viewport shows top bar, message stream, and composer without overlap.
+      - Backend exposes health and mock session list endpoints.
+    expected_artifacts:
+      - package/workspace configuration
+      - frontend app shell
+      - backend server skeleton
+      - shared protocol types
+      - smoke tests or equivalent validation script
+    slice_quality:
+      runnable_behavior: "Open the app and see a real shell backed by mock API data."
+      touched_layers: ["frontend", "backend", "shared-types", "storage"]
+      non_goals:
+        - real Codex/OpenCode/Claude adapter integration
+        - full Skill/Command autocomplete
+        - production auth
+
+  - id: M02
+    name: Multi-Window Session Sync And Message Queue
+    objective: >
+      Implement backend-owned session state, WebSocket/SSE synchronization, message
+      sending, queued outbound messages, and clear-queue semantics across multiple clients.
+    implementation_scope:
+      - Session/message store for mock runtime.
+      - Real-time event channel for multiple browser windows.
+      - Composer send flow preserving message metadata.
+      - Queue state and clear-queue action.
+      - Status indicators for connected clients and queue length.
+    validation:
+      - Two browser windows on the same session stay synchronized.
+      - Sending from one window appears in the other without reload.
+      - Queued messages are visible and can be cleared without interrupting the mock runner.
+      - Mobile viewport can send and receive in the same session.
+    expected_artifacts:
+      - sync/event API
+      - queue reducer/store
+      - message list rendering
+      - tests for queue operations and event fan-out
+    slice_quality:
+      runnable_behavior: "Use two windows and one phone-sized viewport to watch a shared mock session update live."
+      touched_layers: ["backend", "frontend", "shared-types", "tests"]
+      non_goals:
+        - real provider queue draining
+        - cross-user Linux runner ownership
+
+  - id: M03
+    name: Interaction Cards, Approval Flow, And Interrupt Controls
+    objective: >
+      Add mock approval/request cards, contextual card display, composer action menu,
+      Kill/Interrupt confirmation, and event logging for user actions.
+    implementation_scope:
+      - "Approval card renderer for approve/deny/ask style actions."
+      - "Mock tool/user-input request cards."
+      - "Composer action menu with upload image mock, upload file mock, switch model mock, clear queue, and Kill/Interrupt with confirmation."
+      - "Event log entries for every card/action result."
+      - "\"开始测试\" trigger that emits the planned C1 interaction script."
+    validation:
+      - "User can run \"开始测试\" and see all required cards/actions."
+      - "Approval cards appear only when needed."
+      - "Kill requires confirmation and emits interrupt event."
+      - "Every clicked card/action produces a visible mock confirmation message."
+    expected_artifacts:
+      - card component set
+      - action menu
+      - mock interaction script
+      - event log model
+      - manual QA checklist seed
+    slice_quality:
+      runnable_behavior: "A scripted mock conversation exercises approvals, attachments, settings, queue, and interrupt controls."
+      touched_layers: ["frontend", "backend", "protocol", "qa-script"]
+      non_goals:
+        - actual file upload persistence
+        - real provider approval execution
+        - auto-approve policy engine
+
+  - id: M04
+    name: Skill, Command, File Mentions, And Preview Surface
+    objective: >
+      Implement composer autocomplete and message rendering for Skill/Command/file
+      structured tokens, with a right-sidebar preview/detail surface.
+    implementation_scope:
+      - Autocomplete inventory for skills, commands, and local project files.
+      - Structured token insertion in composer.
+      - Message rendering for skill/command/file chips.
+      - Preview/detail panel showing metadata, path, type, and placeholder preview content.
+      - Mock backend confirmation that token metadata survives send/receive.
+    validation:
+      - Typing trigger text opens autocomplete.
+      - Selecting an item inserts a chip/token into the draft.
+      - Sending preserves token metadata and renders chips in the message.
+      - Clicking a chip opens the preview surface.
+      - No chip directly executes a command in C1.
+    expected_artifacts:
+      - autocomplete UI
+      - structured message token schema
+      - preview panel
+      - tests for token serialization
+    slice_quality:
+      runnable_behavior: "Compose and send a message containing Skill/Command/file mentions, then inspect each mention."
+      touched_layers: ["frontend", "backend", "shared-types", "filesystem-api"]
+      non_goals:
+        - full PDF/HTML rendering
+        - real command execution
+        - Codex skills/list integration
+
+  - id: M05
+    name: Hypo-Workflow Sidebar And Project File API
+    objective: >
+      Add the right-sidebar Hypo-Workflow tab backed by safe local project file
+      reads for `.pipeline/` and `.plan-state/`, showing plan progress, config,
+      architecture, and knowledge references.
+    implementation_scope:
+      - Project-root confined file API.
+      - Hypo-Workflow tab with status cards for config, state, current plan phase,
+        C1 milestone draft, architecture summary, and knowledge links.
+      - File existence/read error states.
+      - Project switching entry points wired to the active project context.
+    validation:
+      - The current VSP-Coder project shows real `.pipeline/config.yaml`,
+        `.pipeline/state.yaml`, `.plan-state/discover.yaml`, `.plan-state/decompose.yaml`,
+        and provider interface notes.
+      - Attempts to read outside project root are rejected.
+      - Mobile can switch project/session from the top bar entry point.
+    expected_artifacts:
+      - safe file API
+      - Workflow sidebar tab
+      - project/session switch UI
+      - path confinement tests
+    slice_quality:
+      runnable_behavior: "Open the Workflow tab and inspect real planning/progress data from this repository."
+      touched_layers: ["backend", "frontend", "filesystem", "security-tests"]
+      non_goals:
+        - full markdown/PDF/HTML renderer
+        - cross-user project access
+
+  - id: M06
+    name: C1 Manual QA Harness And Acceptance Polish
+    objective: >
+      Package C1 into a usable acceptance flow with the scripted interaction test,
+      desktop/mobile polish, persistent mock QA results, and a clear pass/fail report.
+    implementation_scope:
+      - Manual QA checklist UI for the "开始测试" flow.
+      - Persisted mock QA run records isolated from future production data.
+      - Desktop responsiveness and mobile safe-area polish.
+      - Error/empty/loading states for major panels.
+      - Final C1 README/runbook.
+    validation:
+      - User can start a QA run, click through all interactions, mark pass/fail,
+        and view the saved QA result.
+      - Desktop and mobile viewports have no incoherent overlap.
+      - App can be started by documented commands.
+      - C1 report summarizes evidence and known deferred work.
+    expected_artifacts:
+      - QA harness
+      - saved QA records
+      - runbook/README updates
+      - final C1 acceptance report
+    slice_quality:
+      runnable_behavior: "Run the complete mock acceptance script and produce a saved C1 QA report."
+      touched_layers: ["frontend", "backend", "storage", "docs"]
+      non_goals:
+        - Codex adapter
+        - real provider costs
+        - production login
+
+  - id: M07
+    name: Sync, Docs, And Approval Gate
+    objective: >
+      Run Hypo-Workflow sync and docs flows after C1 implementation, refresh project
+      documentation, then stop at a user approval gate before closing C1.
+    implementation_scope:
+      - Run `/hw:sync` to refresh derived workflow context and health metadata.
+      - Run `/hw:docs` to generate/check/repair user-facing project documentation.
+      - Update README/runbook and architecture notes where docs automation indicates drift.
+      - Produce final C1 summary and explicit approval request.
+      - Leave the Cycle in a waiting-for-user-approval state.
+    validation:
+      - "`/hw:sync` completes or reports actionable repair guidance."
+      - "`/hw:docs` completes or reports actionable documentation gaps."
+      - "Generated documentation names how to run, test, and manually QA C1."
+      - "The final state clearly asks the user to approve or reject C1."
+    expected_artifacts:
+      - sync/doc command evidence
+      - refreshed documentation
+      - C1 final summary
+      - approval gate status
+    slice_quality:
+      runnable_behavior: "Refresh workflow/docs context and stop for user approval with evidence."
+      touched_layers: ["workflow", "docs", "reports"]
+      non_goals:
+        - starting C2 automatically
+        - changing implemented product behavior
+test_strategy:
+  automated:
+    - shared protocol serialization tests
+    - backend API tests for mock sessions, queue, file confinement, and QA records
+    - frontend component/state tests where practical
+    - build/typecheck/lint
+  manual:
+    - "desktop two-window sync"
+    - "mobile viewport switching and composer"
+    - "\"开始测试\" scripted card/action flow"
+    - "Hypo-Workflow sidebar real file read"
+append_or_greenfield: greenfield
+notes:
+  - C2 begins only after C1 mock protocol and UI acceptance pass.
+  - Do not add real Codex/OpenCode/Claude integration in C1.
+  - Keep production adapter state physically/logically separate from C1 mock data.

@@ -1,0 +1,27 @@
+phase: P3-generate
+language: zh-CN
+project: VSP-Coder
+status: generated
+generated_at: "2026-05-04T23:20:00+08:00"
+mode: greenfield
+workflow_kind: build
+preset: tdd
+test_profiles:
+  - webapp
+artifacts:
+  config: .pipeline/config.yaml
+  cycle: .pipeline/cycle.yaml
+  design_spec: .pipeline/design-spec.md
+  architecture: .pipeline/architecture.md
+  prompts:
+    - .pipeline/prompts/00-app-shell-layout-and-mock-runtime-contract.md
+    - .pipeline/prompts/01-multi-window-session-sync-and-message-queue.md
+    - .pipeline/prompts/02-interaction-cards-approval-flow-and-interrupt-controls.md
+    - .pipeline/prompts/03-skill-command-file-mentions-and-preview-surface.md
+    - .pipeline/prompts/04-hypo-workflow-sidebar-and-project-file-api.md
+    - .pipeline/prompts/05-c1-manual-qa-harness-and-acceptance-polish.md
+    - .pipeline/prompts/06-sync-docs-and-approval-gate.md
+summary:
+  milestone_count: 7
+  selected_stack: TypeScript Web App plus Node backend
+  c1_boundary: Mock runtime and interaction protocol only; no real provider adapters.

@@ -1,0 +1,239 @@
+export type ProviderKind = "mock" | "codex" | "opencode" | "claude";
+
+export type SessionStatus = "idle" | "running" | "queued" | "waiting_approval" | "interrupted" | "done" | "error";
+
+export type Role = "user" | "assistant" | "system" | "tool";
+
+export type TokenKind = "skill" | "command" | "file";
+
+export type StructuredToken = {
+  id: string;
+  kind: TokenKind;
+  label: string;
+  value: string;
+  path?: string;
+  description?: string;
+  risk?: "safe" | "confirm" | "danger";
+};
+
+export type MessageBlock =
+  | { type: "text"; text: string }
+  | { type: "tokens"; tokens: StructuredToken[] }
+  | { type: "attachment"; name: string; mime: string; status: "mocked" | "ready" };
+
+export type Message = {
+  id: string;
+  sessionId: string;
+  role: Role;
+  blocks: MessageBlock[];
+  createdAt: string;
+  providerItemRef?: string;
+};
+
+export type QueueItem = {
+  id: string;
+  text: string;
+  tokens: StructuredToken[];
+  createdAt: string;
+  state: "pending" | "sent" | "cleared";
+};
+
+export type RequestCardKind = "approval" | "user_input" | "settings" | "danger_confirm";
+
+export type RequestCard = {
+  id: string;
+  sessionId: string;
+  kind: RequestCardKind;
+  title: string;
+  body: string;
+  actions: Array<{ id: string; label: string; tone?: "primary" | "neutral" | "danger" }>;
+  status: "open" | "resolved";
+  createdAt: string;
+  resolvedAt?: string;
+};
+
+export type Artifact = {
+  id: string;
+  sessionId: string;
+  title: string;
+  path?: string;
+  mime?: string;
+  previewStatus: "placeholder" | "renderable" | "unsupported";
+};
+
+export type Metric = {
+  inputTokens: number;
+  outputTokens: number;
+  costUsdEstimate: number;
+  startedAt?: string;
+  updatedAt: string;
+};
+
+export type VspEventType =
+  | "session_updated"
+  | "message_added"
+  | "queue_updated"
+  | "card_opened"
+  | "card_resolved"
+  | "runner_interrupt_requested"
+  | "workflow_updated"
+  | "qa_updated"
+  | "error";
+
+export type VspEvent = {
+  id: string;
+  sessionId?: string;
+  projectId?: string;
+  type: VspEventType;
+  message: string;
+  createdAt: string;
+  payload?: unknown;
+};
+
+export type Session = {
+  id: string;
+  projectId: string;
+  provider: ProviderKind;
+  title: string;
+  status: SessionStatus;
+  model: string;
+  reasoning: string;
+  cwd: string;
+  runnerOwner: string;
+  currentTurnId?: string;
+  queue: QueueItem[];
+  messages: Message[];
+  cards: RequestCard[];
+  artifacts: Artifact[];
+  metric: Metric;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  path: string;
+  color: string;
+  status: "active" | "idle" | "missing";
+};
+
+export type ModelOption = {
+  provider: ProviderKind;
+  model: string;
+  label: string;
+  reasoning: string[];
+  status: "available" | "mock" | "unavailable";
+  note?: string;
+};
+
+export type CompletionItem = StructuredToken & {
+  group: "Skills" | "Commands" | "Files";
+};
+
+export type WorkflowFile = {
+  path: string;
+  title: string;
+  exists: boolean;
+  summary: string;
+  content?: string;
+  error?: string;
+};
+
+export type WorkflowMilestone = {
+  id: string;
+  name: string;
+  status: "pending" | "running" | "complete" | "blocked" | "unknown";
+  promptFile?: string;
+  current: boolean;
+};
+
+export type WorkflowConfigItem = {
+  id: string;
+  label: string;
+  value: string;
+  description: string;
+  editable: boolean;
+  choices?: string[];
+};
+
+export type WorkflowSnapshot = {
+  project: Project;
+  hasWorkflow: boolean;
+  files: WorkflowFile[];
+  phase?: string;
+  currentPrompt?: string | null;
+  milestoneCount: number;
+  milestones: WorkflowMilestone[];
+  configItems: WorkflowConfigItem[];
+  compactPlan: string;
+  architectureRef?: WorkflowFile;
+  knowledgeRoot: string;
+  knowledgeRefs: string[];
+};
+
+export type QaItem = {
+  id: string;
+  label: string;
+  status: "pending" | "pass" | "fail";
+  notes?: string;
+};
+
+export type QaRun = {
+  id: string;
+  sessionId: string;
+  title: string;
+  status: "idle" | "running" | "complete";
+  items: QaItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VspState = {
+  projects: Project[];
+  sessions: Session[];
+  events: VspEvent[];
+  qaRuns: QaRun[];
+};
+
+export type SendMessageRequest = {
+  text: string;
+  tokens?: StructuredToken[];
+};
+
+export type CreateSessionRequest = {
+  projectId: string;
+};
+
+export type SessionActionRequest = {
+  type:
+    | "refresh_state"
+    | "open_search"
+    | "open_resource"
+    | "clear_queue"
+    | "interrupt"
+    | "upload_image_mock"
+    | "upload_file_mock"
+    | "switch_model"
+    | "switch_model_mock"
+    | "card_action"
+    | "qa_item_update"
+    | "qa_complete"
+    | "workflow_check"
+    | "workflow_sync"
+    | "config_update";
+  cardId?: string;
+  actionId?: string;
+  qaRunId?: string;
+  qaItemId?: string;
+  qaStatus?: QaItem["status"];
+  provider?: ProviderKind;
+  model?: string;
+  reasoning?: string;
+  configId?: string;
+  value?: string;
+};
+
+export function textMessage(sessionId: string, role: Role, text: string, id: string, createdAt: string): Message {
+  return { id, sessionId, role, createdAt, blocks: [{ type: "text", text }] };
+}

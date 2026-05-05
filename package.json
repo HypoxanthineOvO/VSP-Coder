@@ -1,0 +1,22 @@
+{
+  "name": "vsp-coder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @vsp-coder/server & npm run dev -w @vsp-coder/web",
+    "build": "npm run build -ws",
+    "test": "npm run test -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "start": "npm run start -w @vsp-coder/server",
+    "qa": "npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,74 @@
+schema_version: 1
+id: platform-official-interfaces
+type: chat
+source:
+  session_id: plan-discover-20260504
+  command: /hw:plan
+created_at: "2026-05-04T22:28:00+08:00"
+summary: "Official interface references for Codex, Claude Code, and OpenCode should be maintained as durable planning context."
+details:
+  decision: >
+    VSP-Coder should keep provider integration knowledge in the Knowledge Ledger so future
+    planning and implementation can reload official interface entry points without relying
+    on chat history.
+  codex:
+    primary_docs:
+      - title: Codex product documentation
+        url: https://developers.openai.com/codex/
+      - title: Codex SDK
+        url: https://developers.openai.com/codex/sdk/
+      - title: OpenAI Codex GitHub repository
+        url: https://github.com/openai/codex
+    interface_notes:
+      - Official Codex SDK is described for server-side TypeScript integrations.
+      - Codex can expose an app-server JSON-RPC surface for richer IDE/app integrations.
+      - C2 should prefer the official SDK/protocol surface over scraping terminal text when possible.
+  claude_code:
+    primary_docs:
+      - title: Claude Code overview
+        url: https://docs.claude.com/en/docs/claude-code/overview
+      - title: Claude Agent SDK overview
+        url: https://docs.claude.com/en/docs/claude-code/sdk/sdk-overview
+      - title: Claude Agent SDK TypeScript
+        url: https://code.claude.com/docs/en/agent-sdk/typescript
+    interface_notes:
+      - Claude Agent SDK supports TypeScript and Python integrations.
+      - The TypeScript package includes the Claude Code native binary and exposes hooks, tools, session control, streaming, and permission flows.
+      - Future Claude adapter should preserve model selection and timeout/stop diagnostics as first-class events.
+  opencode:
+    primary_docs:
+      - title: OpenCode documentation
+        url: https://opencode.ai/docs/
+      - title: OpenCode server documentation
+        url: https://opencode.ai/docs/server/
+      - title: OpenCode SDK documentation
+        url: https://opencode.ai/docs/sdk/
+    interface_notes:
+      - OpenCode exposes a headless HTTP server with OpenAPI and SSE-style event streams.
+      - OpenCode also provides JavaScript and TypeScript SDK entry points.
+      - Future OpenCode adapter should model Ask Tool and permission approvals as resumable remote events.
+  stack_implication: >
+    A TypeScript-first Web App and Node.js daemon are the lowest-friction C1-C2 path because
+    all three target platforms expose mature TypeScript or HTTP-facing integration surfaces.
+tags:
+  - codex
+  - claude-code
+  - opencode
+  - official-docs
+  - adapter-api
+  - typescript
+categories:
+  - references
+  - decisions
+  - dependencies
+refs:
+  docs:
+    - https://developers.openai.com/codex/
+    - https://developers.openai.com/codex/sdk/
+    - https://github.com/openai/codex
+    - https://docs.claude.com/en/docs/claude-code/overview
+    - https://docs.claude.com/en/docs/claude-code/sdk/sdk-overview
+    - https://code.claude.com/docs/en/agent-sdk/typescript
+    - https://opencode.ai/docs/
+    - https://opencode.ai/docs/server/
+    - https://opencode.ai/docs/sdk/
