@@ -6,29 +6,48 @@ VSP-Coder is a TypeScript npm workspace.
 
 | Path | Role |
 |---|---|
-| `packages/protocol` | Shared protocol types and helpers. |
-| `apps/server` | Node HTTP mock server, SSE event stream, mock store, and static web serving. |
+| `packages/protocol` | Shared provider-neutral protocol types and helpers. |
+| `apps/server` | Node HTTP server, Codex app-server client, SSE event stream, local store, and static web serving. |
 | `apps/web` | React/Vite workbench UI. |
+| `scripts` | Local deployment helpers. |
 | `.pipeline` | Hypo-Workflow planning, progress, reports, and knowledge files. |
 
 ## Runtime Contract
 
-The server exposes a local mock API:
+The server exposes a local API:
 
-- project/session state is served by `/api/state`;
-- model options are served by `/api/models`;
-- workflow state is served by `/api/workflow`;
-- session messages and actions mutate the mock store;
-- server-sent events notify the web UI to refresh.
+- `/api/state` returns workbench state.
+- `/api/models` returns Codex model options from Codex `model/list` when available.
+- `/api/workflow` returns Hypo-Workflow project status.
+- `/api/sessions` creates Codex threads in discovered project directories.
+- `/api/sessions/:id` hydrates or sends messages to Codex sessions.
+- `/api/sessions/:id/actions` handles rename, interrupt, queue, settings, and workflow actions.
+- `/api/events` streams provider-neutral live patches and lifecycle events.
 
-The mock store is intentionally local. It validates UI flows without taking ownership of real runner execution.
+Local runtime files live under `.vsp-coder/` and are ignored by git.
 
-## UI Notes
+## Deployment Helper
 
-- The app shell uses four desktop columns: global rail, session rail, workspace, and right rail.
-- Desktop rail widths are controlled by CSS variables and React pointer drag state.
-- Mobile switches to a drawer, compact status dock, and approval sheet below `1100px`.
-- The composer action menu closes on outside click and Escape.
+`npm run deploy:local` builds the workspace, finds an available port, starts the built server, waits for `/api/health`, then writes `.vsp-coder/deployment.json`.
+
+The helper accepts:
+
+- `--start-port=<port>`
+- `--port=<port>`
+- `--host=<host>`
+- `--no-build`
+
+## Port Configuration
+
+The built server reads port and host in this order:
+
+1. `PORT`
+2. `VSP_CODER_PORT`
+3. default `4180`
+
+Host is read from `HOST`, then `VSP_CODER_HOST`, then `0.0.0.0`.
+
+The Vite dev proxy reads `VITE_API_TARGET`, then falls back to the same port variables.
 
 ## Verification
 
@@ -38,11 +57,15 @@ Run the full local gate before release:
 npm run typecheck
 npm test
 npm run build
+git diff --check
 ```
 
-## Deferred Backend Work
+## Provider Notes
 
-- Real provider adapters for OpenCode and Claude Code.
-- Persistent project/session discovery beyond the mock store.
-- Real file upload and resource-opening behavior.
-- Session rename/context menu actions.
+C2 ships a real Codex adapter. OpenCode and Claude Code are not active adapters in this release; their future integrations should use the provider protocol documented under `.pipeline/knowledge/reference/`.
+
+## Safety Notes
+
+- Do not hardcode user paths or machine-specific LAN URLs.
+- Do not kill by port alone when restarting local services.
+- Before stopping a local deployment, verify PID, command, and working directory.

@@ -1,6 +1,6 @@
 {
   "name": "@vsp-coder/server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -10,10 +10,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "test": "npm run build && node --test dist/store.test.js"
+    "pretest": "npm run build -w @vsp-coder/protocol",
+    "test": "npm run build && node --test dist/*.test.js"
   },
   "dependencies": {
-    "@vsp-coder/protocol": "0.1.0"
+    "@vsp-coder/protocol": "0.2.0"
   },
   "devDependencies": {
     "tsx": "^4.20.6",

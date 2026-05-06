@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.2.0 - 2026-05-06
+
+### Features
+
+- Connected VSP-Coder to real Codex sessions through the Codex app-server adapter.
+- Added Codex project/session discovery, thread hydration, new thread creation, queued message sending, and interrupt handling.
+- Added real Codex rename persistence through the provider adapter.
+- Added live assistant/tool event mapping, approval handling, command/file-change artifacts, and Subagent trace visibility.
+- Added Markdown, math, safe HTML, command collapse, simple/detail display modes, and mobile/desktop interaction polish.
+- Added a provider-neutral backend protocol document for future adapters.
+
+### Deployment
+
+- Added `npm run deploy:local`, which builds the app, selects an available local port, starts the server, waits for health, and writes runtime metadata under `.vsp-coder/`.
+- Made host and port configurable with `HOST`, `PORT`, and `VSP_CODER_PORT`.
+- Removed release-facing user-specific paths and fixed-port deployment assumptions.
+
+### Validation
+
+- Passed typecheck, tests, build, hardcode scan, local deployment smoke, docs checks, and Hypo-Workflow sync check for the C2 release candidate.
+
 ## v0.1.0 - 2026-05-05
 
 ### Features

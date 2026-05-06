@@ -1,3 +1,4 @@
 extends: recommended
 
-rules: {}
+rules:
+  safe-service-restart: error

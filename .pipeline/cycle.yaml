@@ -3,8 +3,9 @@ cycle:
   name: "C2 Codex Session Adapter"
   workflow_kind: build
   type: feature
-  status: planning
+  status: completed
   started: "2026-05-05T16:00:00+08:00"
+  completed: "2026-05-06T15:00:39+08:00"
   preset: tdd
   previous_cycle: C1
   context_sources:
@@ -27,3 +28,7 @@ cycle:
     gates:
       acceptance: manual_qa
     auto_continue: true
+  acceptance:
+    state: accepted
+    accepted_at: "2026-05-06T15:00:39+08:00"
+    summary: "C2 release candidate accepted for v0.2.0 after Codex adapter QA, deployment smoke, hardcode scan, sync repair, docs check, and regression validation."

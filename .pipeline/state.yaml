@@ -1,30 +1,108 @@
 pipeline:
   name: VSP-Coder
-  status: idle
-  prompts_total: 0
-  prompts_completed: 0
-  started: null
-  finished: null
+  status: completed
+  prompts_total: 12
+  prompts_completed: 12
+  started: "2026-05-05T20:19:52+08:00"
+  finished: "2026-05-06T15:00:39+08:00"
 
-last_heartbeat: null
+last_heartbeat: "2026-05-06T15:00:39+08:00"
 
 current:
-  phase: planning
-  prompt_index: 0
-  prompt_file: null
-  prompt_name: null
-  step: null
-  step_index: 0
+  phase: lifecycle_release
+  prompt_index: 12
+  prompt_file: .pipeline/prompts/12-observability-event-coalescing-and-subagent-trace.md
+  prompt_name: Observability, Event Coalescing, And Subagent Trace
+  step: release
+  step_index: 7
 
-milestones: []
+milestones:
+  - id: M01
+    name: Configuration, Automation Profiles, And No-Hardcode Baseline
+    prompt_file: .pipeline/prompts/01-configuration-automation-profiles-and-no-hardcode-baseline.md
+    status: complete
+    report: .pipeline/reports/m01-configuration-automation-profiles-and-no-hardcode-baseline.md
+  - id: M02
+    name: Codex App-Server Client Foundation
+    prompt_file: .pipeline/prompts/02-codex-app-server-client-foundation.md
+    status: complete
+    report: .pipeline/reports/m02-codex-app-server-client-foundation.md
+  - id: M03
+    name: Codex Thread And Project Discovery
+    prompt_file: .pipeline/prompts/03-codex-thread-and-project-discovery.md
+    status: complete
+    report: .pipeline/reports/m03-codex-thread-and-project-discovery.md
+  - id: M04
+    name: Thread Start, Resume, Queue, And Steer
+    prompt_file: .pipeline/prompts/04-thread-start-resume-queue-and-steer.md
+    status: complete
+    report: .pipeline/reports/m04-thread-start-resume-queue-and-steer.md
+  - id: M05
+    name: Streaming, Event, And Metric Mapping
+    prompt_file: .pipeline/prompts/05-streaming-event-and-metric-mapping.md
+    status: complete
+    report: .pipeline/reports/m05-streaming-event-and-metric-mapping.md
+  - id: M06
+    name: Approval And Automation Strategy
+    prompt_file: .pipeline/prompts/06-approval-and-automation-strategy.md
+    status: complete
+    report: .pipeline/reports/m06-approval-and-automation-strategy.md
+  - id: M07
+    name: File Changes, Command Output, And Preview
+    prompt_file: .pipeline/prompts/07-file-changes-command-output-and-preview.md
+    status: complete
+    report: .pipeline/reports/m07-file-changes-command-output-and-preview.md
+  - id: M08
+    name: Interrupt, Queue Controls, And Error Recovery
+    prompt_file: .pipeline/prompts/08-interrupt-queue-controls-and-error-recovery.md
+    status: complete
+    report: .pipeline/reports/m08-interrupt-queue-controls-and-error-recovery.md
+  - id: M09
+    name: Rename And Persistence Verification
+    prompt_file: .pipeline/prompts/09-rename-and-persistence-verification.md
+    status: complete
+    report: .pipeline/reports/m09-rename-and-persistence-verification.md
+  - id: M10
+    name: Tmp QA Harness, Knowledge Finalization, And Acceptance Gate
+    prompt_file: .pipeline/prompts/10-tmp-qa-harness-knowledge-finalization-and-acceptance-gate.md
+    status: complete
+    report: .pipeline/reports/m10-tmp-qa-harness-knowledge-finalization-and-acceptance-gate.md
+  - id: M11
+    name: Frontend Message Rendering And Interaction Polish
+    prompt_file: .pipeline/prompts/11-frontend-message-rendering-and-interaction-polish.md
+    status: complete
+    report: .pipeline/reports/m11-frontend-message-rendering-and-interaction-polish.md
+  - id: M12
+    name: Observability, Event Coalescing, And Subagent Trace
+    prompt_file: .pipeline/prompts/12-observability-event-coalescing-and-subagent-trace.md
+    status: complete
+    report: .pipeline/reports/m12-observability-event-coalescing-and-subagent-trace.md
 
 history:
-  completed_prompts: []
+  completed_prompts:
+    - .pipeline/prompts/01-configuration-automation-profiles-and-no-hardcode-baseline.md
+    - .pipeline/prompts/02-codex-app-server-client-foundation.md
+    - .pipeline/prompts/03-codex-thread-and-project-discovery.md
+    - .pipeline/prompts/04-thread-start-resume-queue-and-steer.md
+    - .pipeline/prompts/05-streaming-event-and-metric-mapping.md
+    - .pipeline/prompts/06-approval-and-automation-strategy.md
+    - .pipeline/prompts/07-file-changes-command-output-and-preview.md
+    - .pipeline/prompts/08-interrupt-queue-controls-and-error-recovery.md
+    - .pipeline/prompts/09-rename-and-persistence-verification.md
+    - .pipeline/prompts/10-tmp-qa-harness-knowledge-finalization-and-acceptance-gate.md
+    - .pipeline/prompts/11-frontend-message-rendering-and-interaction-polish.md
+    - .pipeline/prompts/12-observability-event-coalescing-and-subagent-trace.md
+
+acceptance:
+  scope: cycle
+  state: accepted
+  cycle_id: C2
+  updated_at: "2026-05-06T15:00:39+08:00"
 
 planning:
   cycle_id: C2
-  phase: discover
-  status: ready
+  phase: confirm
+  status: confirmed
   source_context:
     - .pipeline/archives/C1-mock-chat-workspace-and-interaction-protocol/summary.md
     - .pipeline/knowledge/knowledge.compact.md

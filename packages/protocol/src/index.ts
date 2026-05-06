@@ -1,5 +1,55 @@
 export type ProviderKind = "mock" | "codex" | "opencode" | "claude";
 
+export type DeploymentMode = "local" | "release";
+
+export type DataMode = "codex" | "dev-test";
+
+export type AutomationProfileId = "full_auto" | "workspace_auto" | "manual";
+
+export type CodexApprovalPolicy = "never" | "on-failure" | "on-request" | "untrusted";
+
+export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+
+export type CodexApprovalsReviewer = "user" | "auto_review" | "guardian_subagent";
+
+export type ProviderHealthStatus = "stopped" | "starting" | "ready" | "unavailable" | "crashed";
+
+export type CodexProviderHealth = {
+  provider: "codex";
+  status: ProviderHealthStatus;
+  transport: "stdio";
+  pid?: number;
+  userAgent?: string;
+  codexHome?: string;
+  platformFamily?: string;
+  platformOs?: string;
+  initializedAt?: string;
+  lastError?: string;
+  lastExit?: {
+    code: number | null;
+    signal: string | null;
+    at: string;
+  };
+};
+
+export type AutomationProfile = {
+  id: AutomationProfileId;
+  label: string;
+  description: string;
+  approvalPolicy: CodexApprovalPolicy;
+  sandbox: CodexSandboxMode;
+  approvalsReviewer: CodexApprovalsReviewer;
+};
+
+export type AppConfig = {
+  deploymentMode: DeploymentMode;
+  dataMode: DataMode;
+  automationProfile: AutomationProfileId;
+  profiles: AutomationProfile[];
+  configPath: string;
+  updatedAt: string;
+};
+
 export type SessionStatus = "idle" | "running" | "queued" | "waiting_approval" | "interrupted" | "done" | "error";
 
 export type Role = "user" | "assistant" | "system" | "tool";
@@ -47,7 +97,7 @@ export type RequestCard = {
   title: string;
   body: string;
   actions: Array<{ id: string; label: string; tone?: "primary" | "neutral" | "danger" }>;
-  status: "open" | "resolved";
+  status: "open" | "resolved" | "denied" | "failed" | "expired";
   createdAt: string;
   resolvedAt?: string;
 };
@@ -55,9 +105,12 @@ export type RequestCard = {
 export type Artifact = {
   id: string;
   sessionId: string;
+  kind?: "command" | "file" | "diff" | "preview";
   title: string;
   path?: string;
   mime?: string;
+  status?: "running" | "completed" | "failed" | "declined" | "changed" | "unsupported";
+  body?: string;
   previewStatus: "placeholder" | "renderable" | "unsupported";
 };
 
@@ -66,6 +119,15 @@ export type Metric = {
   outputTokens: number;
   costUsdEstimate: number;
   startedAt?: string;
+  durationMs?: number;
+  contextWindow?: number | null;
+  rateLimits?: {
+    limitName?: string | null;
+    primaryUsedPercent?: number | null;
+    secondaryUsedPercent?: number | null;
+    resetsAt?: string | null;
+    creditsBalance?: string | null;
+  };
   updatedAt: string;
 };
 
@@ -78,6 +140,9 @@ export type VspEventType =
   | "runner_interrupt_requested"
   | "workflow_updated"
   | "qa_updated"
+  | "metric_updated"
+  | "rate_limit_updated"
+  | "warning"
   | "error";
 
 export type VspEvent = {
@@ -100,6 +165,9 @@ export type Session = {
   reasoning: string;
   cwd: string;
   runnerOwner: string;
+  automationProfile?: AutomationProfileId;
+  sandbox?: CodexSandboxMode;
+  approvalPolicy?: CodexApprovalPolicy;
   currentTurnId?: string;
   queue: QueueItem[];
   messages: Message[];
@@ -190,6 +258,8 @@ export type QaRun = {
 };
 
 export type VspState = {
+  config: AppConfig;
+  defaultProjectId?: string;
   projects: Project[];
   sessions: Session[];
   events: VspEvent[];
@@ -214,6 +284,7 @@ export type SessionActionRequest = {
     | "interrupt"
     | "upload_image_mock"
     | "upload_file_mock"
+    | "rename_session"
     | "switch_model"
     | "switch_model_mock"
     | "card_action"
@@ -233,6 +304,8 @@ export type SessionActionRequest = {
   configId?: string;
   value?: string;
 };
+
+export type UpdateAppConfigRequest = Partial<Pick<AppConfig, "deploymentMode" | "dataMode" | "automationProfile">>;
 
 export function textMessage(sessionId: string, role: Role, text: string, id: string, createdAt: string): Message {
   return { id, sessionId, role, createdAt, blocks: [{ type: "text", text }] };

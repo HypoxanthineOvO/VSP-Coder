@@ -1,5 +1,266 @@
 entries:
   -
+    id: RELEASE-v0.2.0-C2-20260506T150039+0800
+    type: release
+    ref: v0.2.0
+    status: ready
+    timestamp: "2026-05-06T15:00:39+08:00"
+    summary: Prepared C2 v0.2.0 release after hardcode scan, deployment script smoke on an available port, Codex app-server smoke, sync repair/check, docs check, typecheck, tests, build, and diff check.
+    report: .pipeline/reports/c2-release-brief.md
+    trigger: manual
+  -
+    id: CYCLE-ACCEPT-C2-20260506T150039+0800
+    type: cycle_accept
+    ref: C2
+    status: accepted
+    timestamp: "2026-05-06T15:00:39+08:00"
+    summary: Accepted C2 Codex Session Adapter for release.
+    report: .pipeline/reports/c2-final-acceptance-report.md
+    trigger: manual
+  -
+    id: M12-QA-FIX-C2-20260506T143334+0800
+    type: milestone
+    ref: M12
+    status: manual_validation
+    timestamp: "2026-05-06T14:33:34+08:00"
+    summary: Fixed duplicate assistant messages caused by live/final item id mismatch and added an explicit subagent not-observed trace when the user requests subagents but Codex emits no provider trace.
+    report: .pipeline/reports/m12-observability-event-coalescing-and-subagent-trace.md
+    trigger: manual
+  -
+    id: M12-READY-QA-C2-20260506T142134+0800
+    type: milestone
+    ref: M12
+    status: manual_validation
+    timestamp: "2026-05-06T14:21:34+08:00"
+    summary: Implemented event coalescing/noise reduction, subagent trace mapping and modal UI, narrow desktop topbar constraints, and test isolation cleanup; validation passed and 4180 restarted safely.
+    report: .pipeline/reports/m12-observability-event-coalescing-and-subagent-trace.md
+    trigger: manual
+  -
+    id: PLAN-EXTEND-C2-M12-20260506T140803+0800
+    type: plan_extend
+    ref: C2
+    status: completed
+    timestamp: "2026-05-06T14:08:03+08:00"
+    summary: Appended M12 Observability, Event Coalescing, And Subagent Trace after user confirmed event noise reduction, popup subagent trace, real Codex subagent QA, and narrow desktop topbar improvements.
+    report: .pipeline/prompts/12-observability-event-coalescing-and-subagent-trace.md
+    trigger: manual
+  -
+    id: M12-START-C2-20260506T140803+0800
+    type: milestone
+    ref: M12
+    status: running
+    timestamp: "2026-05-06T14:08:03+08:00"
+    summary: Started M12 implementation for C2 acceptance observability polish.
+    report: .pipeline/reports/m12-observability-event-coalescing-and-subagent-trace.md
+    trigger: manual
+  -
+    id: M10-UI-POLISH-FIX-C2-20260506T140140+0800
+    type: milestone
+    ref: M10
+    status: manual_validation
+    timestamp: "2026-05-06T14:01:40+08:00"
+    summary: Fixed M10 manual-QA UI issues: reduced live streaming flicker, constrained desktop statusbar widths, removed right Activity tab, changed completions to insert into draft text, and made Skill/File previews read real content through runtime-derived paths.
+    report: .pipeline/reports/m10-tmp-qa-harness-knowledge-finalization-and-acceptance-gate.md
+    trigger: manual
+  -
+    id: M10-READY-QA-C2-20260506T133509+0800
+    type: milestone
+    ref: M10
+    status: manual_validation
+    timestamp: "2026-05-06T13:41:18+08:00"
+    summary: Completed M10 tmp QA endpoints, finalized C2 provider knowledge, generated final acceptance report, passed typecheck/test/build/diff-check, and created disposable tmp Codex session 019dfbcd-d545-7971-a1e2-b77667896d14 for final manual QA.
+    report: .pipeline/reports/m10-tmp-qa-harness-knowledge-finalization-and-acceptance-gate.md
+    trigger: manual
+  -
+    id: M10-START-C2-20260506T132929+0800
+    type: milestone
+    ref: M10
+    status: running
+    timestamp: "2026-05-06T13:29:29+08:00"
+    summary: Started C2 M10 final tmp QA harness, knowledge finalization, and acceptance gate after user confirmed M09 rename persistence across server restart.
+    report: .pipeline/reports/m10-tmp-qa-harness-knowledge-finalization-and-acceptance-gate.md
+    trigger: manual
+  -
+    id: M09-COMPLETE-C2-20260506T132929+0800
+    type: milestone
+    ref: M09
+    status: completed
+    timestamp: "2026-05-06T13:29:29+08:00"
+    summary: User accepted M09 rename persistence after frontend rename, browser refresh, and safe 4180 restart all preserved the canonical Codex title.
+    report: .pipeline/reports/m09-rename-and-persistence-verification.md
+    trigger: manual
+  -
+    id: M09-BUGFIX3-C2-20260506T132129+0800
+    type: milestone
+    ref: M09
+    status: manual_validation
+    timestamp: "2026-05-06T13:21:29+08:00"
+    summary: Fixed reasoning fallback, mobile keyboard responsiveness, scoped polling for external Codex updates, and self-protection for VSP-Coder server-root turns so full-auto work cannot kill the hosting 4180 server.
+    report: .pipeline/reports/m09-rename-and-persistence-verification.md
+    trigger: manual
+  -
+    id: M09-BUGFIX2-C2-20260506T130912+0800
+    type: milestone
+    ref: M09
+    status: manual_validation
+    timestamp: "2026-05-06T13:09:12+08:00"
+    summary: Fixed M09 refresh instability and model picker issues by reducing full-state refreshes, stabilizing session sort timestamps, making refresh explicit, sourcing Codex models from model/list, and moving mobile tool activity into bottom layout flow.
+    report: .pipeline/reports/m09-rename-and-persistence-verification.md
+    trigger: manual
+  -
+    id: M09-BUGFIX-C2-20260506T124912+0800
+    type: milestone
+    ref: M09
+    status: manual_validation
+    timestamp: "2026-05-06T12:49:12+08:00"
+    summary: Fixed M09 pre-QA blockers by forcing local full_auto approval behavior, reconciling stale session profiles, auto-resolving existing approval cards under full_auto, and tightening mobile keyboard/model-control layout.
+    report: .pipeline/reports/m09-rename-and-persistence-verification.md
+    trigger: manual
+  -
+    id: M09-READY-QA-C2-20260506T013716+0800
+    type: milestone
+    ref: M09
+    status: manual_validation
+    timestamp: "2026-05-06T01:37:16+08:00"
+    summary: Implemented real Codex thread rename through thread/name/set, canonical thread/read refresh, title live patching, and frontend rename controls; awaiting tmp-thread persistence QA.
+    report: .pipeline/reports/m09-rename-and-persistence-verification.md
+    trigger: manual
+  -
+    id: M11-COMPLETE-C2-20260506T013716+0800
+    type: milestone
+    ref: M11
+    status: completed
+    timestamp: "2026-05-06T01:37:16+08:00"
+    summary: User accepted M11 frontend rendering and interaction polish after detailed/simple mode, mobile layout, thinking indicator, and file-change aggregation fixes.
+    report: .pipeline/reports/m11-frontend-message-rendering-and-interaction-polish.md
+    trigger: manual
+  -
+    id: PLAN-EXTEND-C2-M11-20260506T001515+0800
+    type: plan_extend
+    ref: C2
+    status: completed
+    timestamp: "2026-05-06T00:15:15+08:00"
+    summary: Appended M11 Frontend Message Rendering And Interaction Polish after user confirmation; M11 should be executed before returning to original M09/M10 flow.
+    report: .pipeline/prompts/11-frontend-message-rendering-and-interaction-polish.md
+    trigger: manual
+  -
+    id: M08-COMPLETE-C2-20260506
+    type: milestone
+    ref: M08
+    status: completed
+    timestamp: "2026-05-06T00:15:15+08:00"
+    summary: User accepted C2 M08 interrupt, queue controls, recovery behavior, and queue dock follow-up.
+    report: .pipeline/reports/m08-interrupt-queue-controls-and-error-recovery.md
+    trigger: manual
+  -
+    id: M08-READY-QA-C2-20260505
+    type: milestone
+    ref: M08
+    status: manual_validation
+    timestamp: "2026-05-05T23:54:52+08:00"
+    summary: Implemented real Codex turn interrupt, VSP pending queue controls, queue drain after completed turns, and app-server disconnect/reconnect recovery semantics.
+    report: .pipeline/reports/m08-interrupt-queue-controls-and-error-recovery.md
+    trigger: manual
+  -
+    id: M07-COMPLETE-C2-20260505
+    type: milestone
+    ref: M07
+    status: completed
+    timestamp: "2026-05-05T23:54:52+08:00"
+    summary: User accepted C2 M07 artifact and preview behavior after command/file-change smoke QA.
+    report: .pipeline/reports/m07-file-changes-command-output-and-preview.md
+    trigger: manual
+  -
+    id: M07-READY-QA-C2-20260505
+    type: milestone
+    ref: M07
+    status: manual_validation
+    timestamp: "2026-05-05T23:34:20+08:00"
+    summary: Implemented Codex command/file-change artifacts, right-sidebar Artifacts tab, session-scoped preview endpoint, and project-root preview confinement.
+    report: .pipeline/reports/m07-file-changes-command-output-and-preview.md
+    trigger: manual
+  -
+    id: M06-COMPLETE-C2-20260505
+    type: milestone
+    ref: M06
+    status: completed
+    timestamp: "2026-05-05T23:34:20+08:00"
+    summary: User accepted C2 M06 approval strategy after approve and decline paths were verified against real Codex request cards.
+    report: .pipeline/reports/m06-approval-and-automation-strategy.md
+    trigger: manual
+  -
+    id: M06-READY-QA-C2-20260505
+    type: milestone
+    ref: M06
+    status: manual_validation
+    timestamp: "2026-05-05T22:51:47+08:00"
+    summary: Implemented Codex approval/user-input request mapping, RequestCard resolution, automation profile routing, and response-shape tests; awaiting manual tmp-thread QA.
+    report: .pipeline/reports/m06-approval-and-automation-strategy.md
+    trigger: manual
+  -
+    id: M05-COMPLETE-C2-20260505
+    type: milestone
+    ref: M05
+    status: completed
+    timestamp: "2026-05-05T22:51:47+08:00"
+    summary: User accepted C2 M05 streaming/event/metric mapping and post-QA UI/state fixes.
+    report: .pipeline/reports/m05-streaming-event-and-metric-mapping.md
+    trigger: manual
+  -
+    id: M05-READY-QA-C2-20260505
+    type: milestone
+    ref: M05
+    status: manual_validation
+    timestamp: "2026-05-05T21:59:29+08:00"
+    summary: Implemented Codex streaming notification mapping, transient SSE live patches, status/metric/rate-limit events, and fixture tests; awaiting manual tmp-thread QA.
+    report: .pipeline/reports/m05-streaming-event-and-metric-mapping.md
+    trigger: manual
+  -
+    id: DEBUG-C2-M04-SESSION-LATENCY-20260505T213856+0800
+    type: debug
+    ref: M04
+    status: completed
+    timestamp: "2026-05-05T21:38:56+08:00"
+    summary: Investigated slow Codex session hydration and applied cache, in-flight dedupe, stale refresh, and visible load/error states.
+    report: .pipeline/debug/20260505-213856-codex-session-read-latency.md
+    trigger: manual
+  -
+    id: M04-COMPLETE-C2-20260505
+    type: milestone
+    ref: M04
+    status: completed
+    timestamp: "2026-05-05T21:08:00+08:00"
+    summary: Completed C2 M04 thread/read message hydration, thread/start creation entry, and provider-aware turn/start send path.
+    report: .pipeline/reports/m04-thread-start-resume-queue-and-steer.md
+    trigger: manual
+  -
+    id: M03-COMPLETE-C2-20260505
+    type: milestone
+    ref: M03
+    status: completed
+    timestamp: "2026-05-05T20:48:00+08:00"
+    summary: Completed C2 M03 read-only Codex thread and project discovery from thread/list cwd metadata.
+    report: .pipeline/reports/m03-codex-thread-and-project-discovery.md
+    trigger: manual
+  -
+    id: M02-COMPLETE-C2-20260505
+    type: milestone
+    ref: M02
+    status: completed
+    timestamp: "2026-05-05T20:34:40+08:00"
+    summary: Completed C2 M02 Codex app-server process manager, newline JSON-RPC client, health API, and Settings provider status.
+    report: .pipeline/reports/m02-codex-app-server-client-foundation.md
+    trigger: manual
+  -
+    id: M01-COMPLETE-C2-20260505
+    type: milestone
+    ref: M01
+    status: completed
+    timestamp: "2026-05-05T20:19:52+08:00"
+    summary: Completed C2 M01 configuration, automation profiles, no-hardcode baseline, and dev-test mock data isolation.
+    report: .pipeline/reports/m01-configuration-automation-profiles-and-no-hardcode-baseline.md
+    trigger: manual
+  -
     id: CYCLE-NEW-C2-20260505T160000+0800
     type: cycle
     ref: C2

@@ -2,231 +2,128 @@ phase: P2-decompose
 language: zh-CN
 project: VSP-Coder
 cycle:
-  id: C1
-  name: Mock Chat Workspace And Interaction Protocol
+  id: C2
+  name: Codex Session Adapter
   workflow_kind: build
   preset: tdd
-status: pending_user_confirmation
+status: confirmed
 milestones:
   - id: M01
-    name: App Shell, Layout, And Mock Runtime Contract
+    name: Configuration, Automation Profiles, And No-Hardcode Baseline
     objective: >
-      Create the TypeScript app foundation with desktop/mobile layout regions,
-      a backend mock runtime contract, isolated storage scaffolding, and a first
-      visible session workspace.
-    implementation_scope:
-      - TypeScript monorepo setup for frontend and backend.
-      - React/Vite desktop layout matching the reference regions.
-      - Mobile top-bar/current-session layout baseline.
-      - Node backend with typed VSP protocol models and mock endpoints.
-      - Isolated mock storage namespace that cannot be confused with future production adapter data.
+      Create the real instance configuration path, make automation profiles
+      frontend/backend consistent, remove production hardcoded user paths, and
+      isolate mock/tmp data behind dev/test mode.
     validation:
-      - App starts locally with one command.
-      - Desktop shows global sidebar, project/session sidebar, message workspace, composer, and right sidebar.
-      - Mobile viewport shows top bar, message stream, and composer without overlap.
-      - Backend exposes health and mock session list endpoints.
-    expected_artifacts:
-      - package/workspace configuration
-      - frontend app shell
-      - backend server skeleton
-      - shared protocol types
-      - smoke tests or equivalent validation script
-    slice_quality:
-      runnable_behavior: "Open the app and see a real shell backed by mock API data."
-      touched_layers: ["frontend", "backend", "shared-types", "storage"]
-      non_goals:
-        - real Codex/OpenCode/Claude adapter integration
-        - full Skill/Command autocomplete
-        - production auth
+      - Local ignored config controls deployment mode and default profile.
+      - Frontend settings can switch available automation profiles.
+      - Backend persists and applies the selected profile.
+      - Production code no longer hardcodes /home/heyx or fixed demo projects.
+      - Mock/tmp sessions are visible only in dev/test mode.
 
   - id: M02
-    name: Multi-Window Session Sync And Message Queue
+    name: Codex App-Server Client Foundation
     objective: >
-      Implement backend-owned session state, WebSocket/SSE synchronization, message
-      sending, queued outbound messages, and clear-queue semantics across multiple clients.
-    implementation_scope:
-      - Session/message store for mock runtime.
-      - Real-time event channel for multiple browser windows.
-      - Composer send flow preserving message metadata.
-      - Queue state and clear-queue action.
-      - Status indicators for connected clients and queue length.
+      Add Codex app-server process management and a typed JSON-RPC client based
+      on generated schema artifacts.
     validation:
-      - Two browser windows on the same session stay synchronized.
-      - Sending from one window appears in the other without reload.
-      - Queued messages are visible and can be cleared without interrupting the mock runner.
-      - Mobile viewport can send and receive in the same session.
-    expected_artifacts:
-      - sync/event API
-      - queue reducer/store
-      - message list rendering
-      - tests for queue operations and event fan-out
-    slice_quality:
-      runnable_behavior: "Use two windows and one phone-sized viewport to watch a shared mock session update live."
-      touched_layers: ["backend", "frontend", "shared-types", "tests"]
-      non_goals:
-        - real provider queue draining
-        - cross-user Linux runner ownership
+      - Backend can start/connect to codex app-server.
+      - Health, startup failure, disconnect, and restart states are visible.
+      - Tests cover JSON-RPC request/response/notification plumbing.
 
   - id: M03
-    name: Interaction Cards, Approval Flow, And Interrupt Controls
+    name: Codex Thread And Project Discovery
     objective: >
-      Add mock approval/request cards, contextual card display, composer action menu,
-      Kill/Interrupt confirmation, and event logging for user actions.
-    implementation_scope:
-      - "Approval card renderer for approve/deny/ask style actions."
-      - "Mock tool/user-input request cards."
-      - "Composer action menu with upload image mock, upload file mock, switch model mock, clear queue, and Kill/Interrupt with confirmation."
-      - "Event log entries for every card/action result."
-      - "\"开始测试\" trigger that emits the planned C1 interaction script."
+      Replace mock-default discovery with Codex thread/project discovery using
+      thread list/read/resume metadata, especially cwd.
     validation:
-      - "User can run \"开始测试\" and see all required cards/actions."
-      - "Approval cards appear only when needed."
-      - "Kill requires confirmation and emits interrupt event."
-      - "Every clicked card/action produces a visible mock confirmation message."
-    expected_artifacts:
-      - card component set
-      - action menu
-      - mock interaction script
-      - event log model
-      - manual QA checklist seed
-    slice_quality:
-      runnable_behavior: "A scripted mock conversation exercises approvals, attachments, settings, queue, and interrupt controls."
-      touched_layers: ["frontend", "backend", "protocol", "qa-script"]
-      non_goals:
-        - actual file upload persistence
-        - real provider approval execution
-        - auto-approve policy engine
+      - Existing Codex sessions can be listed without mutation.
+      - Projects are aggregated from real thread cwd values.
+      - Empty state supports opening a local directory for a new thread.
+      - Before acceptance, non-tmp threads are read-only.
 
   - id: M04
-    name: Skill, Command, File Mentions, And Preview Surface
+    name: Thread Start, Resume, Queue, And Steer
     objective: >
-      Implement composer autocomplete and message rendering for Skill/Command/file
-      structured tokens, with a right-sidebar preview/detail surface.
-    implementation_scope:
-      - Autocomplete inventory for skills, commands, and local project files.
-      - Structured token insertion in composer.
-      - Message rendering for skill/command/file chips.
-      - Preview/detail panel showing metadata, path, type, and placeholder preview content.
-      - Mock backend confirmation that token metadata survives send/receive.
+      Start and resume real Codex threads and route all frontend messages through
+      the VSP server queue into turn/start or turn/steer.
     validation:
-      - Typing trigger text opens autocomplete.
-      - Selecting an item inserts a chip/token into the draft.
-      - Sending preserves token metadata and renders chips in the message.
-      - Clicking a chip opens the preview surface.
-      - No chip directly executes a command in C1.
-    expected_artifacts:
-      - autocomplete UI
-      - structured message token schema
-      - preview panel
-      - tests for token serialization
-    slice_quality:
-      runnable_behavior: "Compose and send a message containing Skill/Command/file mentions, then inspect each mention."
-      touched_layers: ["frontend", "backend", "shared-types", "filesystem-api"]
-      non_goals:
-        - full PDF/HTML rendering
-        - real command execution
-        - Codex skills/list integration
+      - Tmp project can create a real Codex thread.
+      - Resumed threads load canonical Codex messages/turns.
+      - One thread has at most one active turn; extra messages queue safely.
 
   - id: M05
-    name: Hypo-Workflow Sidebar And Project File API
+    name: Streaming, Event, And Metric Mapping
     objective: >
-      Add the right-sidebar Hypo-Workflow tab backed by safe local project file
-      reads for `.pipeline/` and `.plan-state/`, showing plan progress, config,
-      architecture, and knowledge references.
-    implementation_scope:
-      - Project-root confined file API.
-      - Hypo-Workflow tab with status cards for config, state, current plan phase,
-        C1 milestone draft, architecture summary, and knowledge links.
-      - File existence/read error states.
-      - Project switching entry points wired to the active project context.
+      Map Codex deltas, completed items, status changes, warnings, errors,
+      token usage, and rate-limit updates into the VSP protocol.
     validation:
-      - The current VSP-Coder project shows real `.pipeline/config.yaml`,
-        `.pipeline/state.yaml`, `.plan-state/discover.yaml`, `.plan-state/decompose.yaml`,
-        and provider interface notes.
-      - Attempts to read outside project root are rejected.
-      - Mobile can switch project/session from the top bar entry point.
-    expected_artifacts:
-      - safe file API
-      - Workflow sidebar tab
-      - project/session switch UI
-      - path confinement tests
-    slice_quality:
-      runnable_behavior: "Open the Workflow tab and inspect real planning/progress data from this repository."
-      touched_layers: ["backend", "frontend", "filesystem", "security-tests"]
-      non_goals:
-        - full markdown/PDF/HTML renderer
-        - cross-user project access
+      - Frontend streams real assistant output.
+      - Status, error, token, and rate-limit surfaces update from Codex events.
+      - Knowledge documents the evolving VSP provider protocol and Codex mapping.
 
   - id: M06
-    name: C1 Manual QA Harness And Acceptance Polish
+    name: Approval And Automation Strategy
     objective: >
-      Package C1 into a usable acceptance flow with the scripted interaction test,
-      desktop/mobile polish, persistent mock QA results, and a clear pass/fail report.
-    implementation_scope:
-      - Manual QA checklist UI for the "开始测试" flow.
-      - Persisted mock QA run records isolated from future production data.
-      - Desktop responsiveness and mobile safe-area polish.
-      - Error/empty/loading states for major panels.
-      - Final C1 README/runbook.
+      Map Codex server requests into VSP request cards and make automation
+      profiles materially affect request routing.
     validation:
-      - User can start a QA run, click through all interactions, mark pass/fail,
-        and view the saved QA result.
-      - Desktop and mobile viewports have no incoherent overlap.
-      - App can be started by documented commands.
-      - C1 report summarizes evidence and known deferred work.
-    expected_artifacts:
-      - QA harness
-      - saved QA records
-      - runbook/README updates
-      - final C1 acceptance report
-    slice_quality:
-      runnable_behavior: "Run the complete mock acceptance script and produce a saved C1 QA report."
-      touched_layers: ["frontend", "backend", "storage", "docs"]
-      non_goals:
-        - Codex adapter
-        - real provider costs
-        - production login
+      - Manual profile shows command and file-change approval cards.
+      - Full automation profile does not require frontend approval for normal
+        local operation.
+      - Permission, tool user-input, and MCP elicitation mappings are covered.
 
   - id: M07
-    name: Sync, Docs, And Approval Gate
+    name: File Changes, Command Output, And Preview
     objective: >
-      Run Hypo-Workflow sync and docs flows after C1 implementation, refresh project
-      documentation, then stop at a user approval gate before closing C1.
-    implementation_scope:
-      - Run `/hw:sync` to refresh derived workflow context and health metadata.
-      - Run `/hw:docs` to generate/check/repair user-facing project documentation.
-      - Update README/runbook and architecture notes where docs automation indicates drift.
-      - Produce final C1 summary and explicit approval request.
-      - Leave the Cycle in a waiting-for-user-approval state.
+      Surface command output summaries, changed files, diffs, and preview targets
+      from real Codex turns.
     validation:
-      - "`/hw:sync` completes or reports actionable repair guidance."
-      - "`/hw:docs` completes or reports actionable documentation gaps."
-      - "Generated documentation names how to run, test, and manually QA C1."
-      - "The final state clearly asks the user to approve or reject C1."
-    expected_artifacts:
-      - sync/doc command evidence
-      - refreshed documentation
-      - C1 final summary
-      - approval gate status
-    slice_quality:
-      runnable_behavior: "Refresh workflow/docs context and stop for user approval with evidence."
-      touched_layers: ["workflow", "docs", "reports"]
-      non_goals:
-        - starting C2 automatically
-        - changing implemented product behavior
+      - Tmp prompt produces visible command result and file change preview.
+      - Safe file preview remains project-root confined.
+      - Full terminal and rich diff editor remain deferred.
+
+  - id: M08
+    name: Interrupt, Queue Controls, And Error Recovery
+    objective: >
+      Connect interrupt, pending queue controls, app-server crash recovery, and
+      multi-window state synchronization for real Codex sessions.
+    validation:
+      - turn/interrupt works from the frontend.
+      - Clear queue affects pending VSP messages only.
+      - app-server restart/disconnect produces understandable UI state.
+
+  - id: M09
+    name: Rename And Persistence Verification
+    objective: >
+      Implement real Codex thread rename and verify canonical persistence across
+      refresh and VSP server restart.
+    validation:
+      - Rename calls Codex thread/name/set.
+      - VSP refreshes the canonical name from Codex.
+      - Tmp thread name survives browser refresh and server restart.
+
+  - id: M10
+    name: Tmp QA Harness, Knowledge Finalization, And Acceptance Gate
+    objective: >
+      Package disposable tmp QA, final manual test script, knowledge protocol
+      docs, and the explicit user accept gate for C2.
+    validation:
+      - Tmp fixture is generated and isolated.
+      - Manual QA script covers the full C2 acceptance chain.
+      - Final protocol and adapter mapping docs are complete.
+      - User accepts or rejects C2 explicitly.
 test_strategy:
   automated:
-    - shared protocol serialization tests
-    - backend API tests for mock sessions, queue, file confinement, and QA records
-    - frontend component/state tests where practical
-    - build/typecheck/lint
+    - typecheck/build/test across workspaces
+    - config/profile mapping tests
+    - no-hardcoded-user-path checks
+    - Codex JSON-RPC client plumbing tests
+    - adapter mapping fixture tests
+    - queue/rename/discovery backend tests
   manual:
-    - "desktop two-window sync"
-    - "mobile viewport switching and composer"
-    - "\"开始测试\" scripted card/action flow"
-    - "Hypo-Workflow sidebar real file read"
-append_or_greenfield: greenfield
-notes:
-  - C2 begins only after C1 mock protocol and UI acceptance pass.
-  - Do not add real Codex/OpenCode/Claude integration in C1.
-  - Keep production adapter state physically/logically separate from C1 mock data.
+    - focused check after each Milestone
+    - final tmp-project Codex walkthrough before accept
+status_notes:
+  confirmed_by_user: true
+  p3_ready: true

@@ -1,6 +1,6 @@
 {
   "name": "vsp-coder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -13,7 +13,8 @@
     "test": "npm run test -ws --if-present",
     "typecheck": "npm run typecheck -ws --if-present",
     "start": "npm run start -w @vsp-coder/server",
-    "qa": "npm run test && npm run build"
+    "qa": "npm run test && npm run build",
+    "deploy:local": "node scripts/deploy-local.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

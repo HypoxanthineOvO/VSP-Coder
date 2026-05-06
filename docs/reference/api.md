@@ -1,18 +1,58 @@
 # API Reference
 
-The API is a mock contract for the v0.1.0 workbench.
+VSP-Coder exposes a local HTTP API used by the web workbench. C2 replaces the
+old mock session contract with a real Codex-backed provider while keeping a
+small adapter boundary for future providers.
+
+All endpoints are local-first. The default server port is configurable with
+`PORT` or `VSP_CODER_PORT`.
+
+## Health
+
+`GET /api/health`
+
+Returns server readiness.
+
+```json
+{ "ok": true }
+```
 
 ## State
 
 `GET /api/state`
 
-Returns the full workbench state: projects, sessions, events, and QA runs.
+Returns the complete UI snapshot:
+
+- provider runtime status and automation policy
+- discovered Codex projects and sessions
+- recent sessions
+- selected session transcript
+- queue items
+- model and reasoning selection
+- artifacts, command events, file edits, approvals, and diagnostics
+
+The UI treats this response as a cacheable snapshot and updates it from SSE
+refresh signals.
+
+## Events
+
+`GET /api/events`
+
+Opens a Server-Sent Events stream. Events are emitted as `vsp` events and carry
+small refresh hints rather than full session payloads.
+
+Consumers should refresh the affected state from `GET /api/state` and preserve
+local scroll/input state when possible.
 
 ## Models
 
 `GET /api/models`
 
-Returns model/provider options. Each option includes:
+Returns the model and reasoning options available for the active provider.
+For Codex, the list is derived from the provider capability surface rather than
+from a fixed frontend enum.
+
+Each item includes:
 
 - `provider`
 - `model`
@@ -21,41 +61,100 @@ Returns model/provider options. Each option includes:
 - `status`
 - `note`
 
-`status: "mock"` means the selector updates session state but does not launch a real provider runner.
+## Provider Actions
 
-## Workflow
+`POST /api/provider/start`
 
-`GET /api/workflow?projectId=<id>`
+Starts the configured provider runner when it is not already running.
 
-Returns Hypo-Workflow project information, including milestone progress, compact plan text, config items, architecture refs, knowledge root, and `hasWorkflow`.
+`POST /api/provider/stop`
+
+Stops the provider runner owned by this server.
+
+`POST /api/provider/restart`
+
+Restarts only the provider runner owned by this server.
 
 ## Sessions
 
 `POST /api/sessions`
 
-Creates a mock session for a project.
+Creates a new session for a discovered or explicitly selected project.
+
+Request body:
+
+```json
+{
+  "projectId": "project-id",
+  "message": "optional first message",
+  "model": "gpt-5.5",
+  "reasoning": "xhigh"
+}
+```
 
 `POST /api/sessions/:id`
 
-Appends a user message or structured tokens to a session.
+Queues a user message for an existing session. The server appends the item to
+its local queue and steers the real Codex runner.
+
+Request body:
+
+```json
+{
+  "message": "Please run npm test",
+  "model": "gpt-5.5",
+  "reasoning": "high"
+}
+```
 
 `POST /api/sessions/:id/actions`
 
-Runs a mock session action. Important action types include:
+Runs a session-level action. Supported C2 actions include:
 
 - `switch_model`
+- `rename`
 - `refresh_state`
 - `interrupt`
 - `clear_queue`
+- `approve`
+- `decline`
 - `card_action`
-- `qa_item_update`
-- `qa_complete`
 - `workflow_check`
 - `workflow_sync`
 - `config_update`
 
-## Events
+Rename is persisted through the Codex session storage path exposed by the
+provider adapter, matching the durable behavior users see after refresh.
 
-`GET /api/events`
+## Workflow
 
-Opens an SSE stream. Events are sent as `vsp` events and prompt the web UI to refresh.
+`GET /api/workflow?projectId=<id>`
+
+Returns Hypo-Workflow project information when the selected project contains a
+`.pipeline/` workspace:
+
+- milestone progress
+- compact plan text
+- config items
+- architecture references
+- knowledge root
+- `hasWorkflow`
+
+## Preview
+
+`GET /api/preview/:id`
+
+Returns sanitized preview content for supported skills, commands, and files.
+The preview surface is intentionally bounded and should not be treated as a
+general filesystem read endpoint.
+
+## Temporary QA
+
+`POST /api/qa/tmp-session`
+
+Development-only helper used by the C2 acceptance flow. It creates a temporary
+Codex-style session under the operating system temporary directory and returns
+its generated project/session metadata.
+
+This endpoint must not hardcode a user path and must not be required for normal
+deployment.

@@ -1,10 +1,15 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  AppConfig,
   Artifact,
+  AutomationProfile,
+  AutomationProfileId,
   CompletionItem,
   CreateSessionRequest,
+  DataMode,
   ModelOption,
   Project,
   ProviderKind,
@@ -13,6 +18,7 @@ import type {
   SendMessageRequest,
   Session,
   SessionActionRequest,
+  UpdateAppConfigRequest,
   VspEvent,
   VspState,
   WorkflowConfigItem,
@@ -23,6 +29,7 @@ import type {
 
 export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const storeFile = join(projectRoot, ".vsp-coder", "mock-store", "state.json");
+const appConfigFile = join(projectRoot, ".vsp-coder", "config.json");
 
 type Subscriber = (event: VspEvent) => void;
 
@@ -37,21 +44,47 @@ const baseProject: Project = {
   status: "active"
 };
 
-const otherProjects: Project[] = [
-  { id: "hypo-workflow", name: "Hypo-Workflow", path: "/home/heyx/Hypo-Workflow", color: "#7c83ff", status: "idle" },
-  { id: "vsp-framework", name: "VSP-Framework", path: "/home/heyx/VSP-Framework", color: "#f7b500", status: "idle" },
-  { id: "hypo-agent", name: "Hypo-Agent", path: "/home/heyx/Hypo-Agent", color: "#45e0c2", status: "idle" }
+export const automationProfiles: AutomationProfile[] = [
+  {
+    id: "full_auto",
+    label: "全自动",
+    description: "本地全自动运行；Codex 请求不经前端审批，sandbox 使用 danger-full-access。",
+    approvalPolicy: "never",
+    sandbox: "danger-full-access",
+    approvalsReviewer: "user"
+  },
+  {
+    id: "workspace_auto",
+    label: "工作区自动",
+    description: "允许工作区写入，失败或风险动作再确认。",
+    approvalPolicy: "on-failure",
+    sandbox: "workspace-write",
+    approvalsReviewer: "user"
+  },
+  {
+    id: "manual",
+    label: "手动确认",
+    description: "命令、文件变更和权限请求通过 VSP-Coder 前端卡片确认。",
+    approvalPolicy: "untrusted",
+    sandbox: "workspace-write",
+    approvalsReviewer: "user"
+  }
 ];
 
-const modelOptions: ModelOption[] = [
-  { provider: "codex", model: "gpt-5.5", label: "Codex · gpt-5.5", reasoning: ["xhigh", "high", "medium"], status: "mock", note: "当前会话映射" },
-  { provider: "codex", model: "codex-default", label: "Codex 默认", reasoning: ["xhigh", "high", "medium"], status: "mock", note: "沿用 Codex 默认配置" },
-  { provider: "opencode", model: "opencode-default", label: "OpenCode 默认", reasoning: ["high", "medium"], status: "mock", note: "Provider 映射占位" },
-  { provider: "claude", model: "claude-sonnet", label: "Claude Code · Sonnet", reasoning: ["high", "medium"], status: "mock", note: "Provider 映射占位" }
-];
+function modelOptions(dataMode: DataMode): ModelOption[] {
+  const codexStatus = dataMode === "dev-test" ? "mock" : "available";
+  return [
+    { provider: "codex", model: "gpt-5.5", label: "GPT-5.5", reasoning: ["xhigh", "high", "medium", "low"], status: codexStatus, note: dataMode === "dev-test" ? "开发测试映射" : "Codex app-server" },
+    { provider: "codex", model: "gpt-5.4", label: "GPT-5.4", reasoning: ["xhigh", "high", "medium", "low"], status: codexStatus, note: dataMode === "dev-test" ? "开发测试映射" : "Codex app-server" },
+    { provider: "codex", model: "gpt-5.3-codex", label: "GPT-5.3 Codex", reasoning: ["xhigh", "high", "medium", "low"], status: codexStatus, note: dataMode === "dev-test" ? "开发测试映射" : "Codex app-server" },
+    { provider: "codex", model: "gpt-5.2", label: "GPT-5.2", reasoning: ["xhigh", "high", "medium", "low"], status: codexStatus, note: dataMode === "dev-test" ? "开发测试映射" : "Codex app-server" },
+    { provider: "codex", model: "gpt-5.4-mini", label: "GPT-5.4 Mini", reasoning: ["xhigh", "high", "medium", "low"], status: codexStatus, note: dataMode === "dev-test" ? "开发测试映射" : "Codex app-server" }
+  ];
+}
 
-function seedState(): VspState {
+function seedState(config: AppConfig): VspState {
   const createdAt = now();
+  const profile = activeProfile(config);
   const session: Session = {
     id: "mock-main",
     projectId: baseProject.id,
@@ -62,6 +95,9 @@ function seedState(): VspState {
     reasoning: "xhigh",
     cwd: projectRoot,
     runnerOwner: "mock-user",
+    automationProfile: config.automationProfile,
+    sandbox: profile.sandbox,
+    approvalPolicy: profile.approvalPolicy,
     queue: [],
     messages: [
       {
@@ -99,19 +135,21 @@ function seedState(): VspState {
     updatedAt: createdAt
   };
 
+  const includeMock = mockDataEnabled(config);
   return {
-    projects: [baseProject, ...otherProjects],
-    sessions: [session],
-    events: [
+    config,
+    projects: [baseProject],
+    sessions: includeMock ? [session] : [],
+    events: includeMock ? [
       {
         id: "event-welcome",
         sessionId: session.id,
         projectId: baseProject.id,
         type: "session_updated",
-        message: "VSP-Coder 会话已恢复",
+        message: "VSP-Coder 开发测试会话已恢复",
         createdAt
       }
-    ],
+    ] : [],
     qaRuns: []
   };
 }
@@ -120,12 +158,94 @@ function ensureStore() {
   mkdirSync(dirname(storeFile), { recursive: true });
 }
 
-function loadState(): VspState {
+function defaultConfig(): AppConfig {
+  return {
+    deploymentMode: "local",
+    dataMode: "codex",
+    automationProfile: "full_auto",
+    profiles: automationProfiles,
+    configPath: ".vsp-coder/config.json",
+    updatedAt: now()
+  };
+}
+
+function loadConfig(): AppConfig {
+  mkdirSync(dirname(appConfigFile), { recursive: true });
+  let parsed: Partial<AppConfig> = {};
+  try {
+    parsed = JSON.parse(readFileSync(appConfigFile, "utf8")) as Partial<AppConfig>;
+  } catch {
+    // First run creates the ignored local config below.
+  }
+  const config = normalizeConfig(parsed);
+  saveConfig(config);
+  return config;
+}
+
+function resolvePreviewPath(path: string) {
+  const candidate = path.startsWith("/") ? resolve(path) : resolve(projectRoot, path);
+  const codexHome = resolve(process.env.CODEX_HOME || join(homedir(), ".codex"));
+  const allowedRoots = [projectRoot, codexHome].map((root) => `${resolve(root)}/`);
+  const allowed = candidate === projectRoot || candidate === codexHome || allowedRoots.some((root) => candidate.startsWith(root));
+  if (!allowed || !existsSync(candidate) || !statSync(candidate).isFile()) return null;
+  return candidate;
+}
+
+function readPreviewBody(path: string) {
+  const maxBytes = 160_000;
+  const size = statSync(path).size;
+  const body = readFileSync(path, "utf8");
+  if (size <= maxBytes) return body;
+  return `${body.slice(0, maxBytes)}\n\n[preview truncated at ${maxBytes} bytes]`;
+}
+
+function normalizeConfig(input: Partial<AppConfig>): AppConfig {
+  const fallback = defaultConfig();
+  const deploymentMode = input.deploymentMode === "release" ? "release" : "local";
+  const dataMode = input.dataMode === "dev-test" ? "dev-test" : "codex";
+  const requestedProfile = isAutomationProfile(input.automationProfile) ? input.automationProfile : fallback.automationProfile;
+  const automationProfile = deploymentMode === "local" ? "full_auto" : requestedProfile;
+  return {
+    deploymentMode,
+    dataMode,
+    automationProfile,
+    profiles: automationProfiles,
+    configPath: fallback.configPath,
+    updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : fallback.updatedAt
+  };
+}
+
+function isAutomationProfile(value: unknown): value is AutomationProfileId {
+  return automationProfiles.some((profile) => profile.id === value);
+}
+
+function saveConfig(config: AppConfig) {
+  mkdirSync(dirname(appConfigFile), { recursive: true });
+  const { profiles: _profiles, ...persisted } = config;
+  writeFileSync(appConfigFile, JSON.stringify(persisted, null, 2), "utf8");
+}
+
+function activeProfile(config: AppConfig) {
+  return automationProfiles.find((profile) => profile.id === config.automationProfile) || automationProfiles[0];
+}
+
+function mockDataEnabled(config: AppConfig) {
+  return config.dataMode === "dev-test" || process.env.VSP_DEV_FIXTURES === "1";
+}
+
+function loadState(config: AppConfig): VspState {
   ensureStore();
   try {
-    return JSON.parse(readFileSync(storeFile, "utf8")) as VspState;
+    const state = JSON.parse(readFileSync(storeFile, "utf8")) as Partial<VspState>;
+    return {
+      config,
+      projects: Array.isArray(state.projects) ? state.projects : [],
+      sessions: Array.isArray(state.sessions) ? state.sessions : [],
+      events: Array.isArray(state.events) ? state.events : [],
+      qaRuns: Array.isArray(state.qaRuns) ? state.qaRuns : []
+    };
   } catch {
-    const seeded = seedState();
+    const seeded = seedState(config);
     saveState(seeded);
     return seeded;
   }
@@ -133,11 +253,13 @@ function loadState(): VspState {
 
 function saveState(state: VspState) {
   ensureStore();
-  writeFileSync(storeFile, JSON.stringify(state, null, 2), "utf8");
+  const { config: _config, ...persisted } = state;
+  writeFileSync(storeFile, JSON.stringify(persisted, null, 2), "utf8");
 }
 
 export class MockStore {
-  private state = loadState();
+  private config = loadConfig();
+  private state = loadState(this.config);
   private subscribers = new Set<Subscriber>();
 
   constructor() {
@@ -145,7 +267,24 @@ export class MockStore {
   }
 
   snapshot() {
-    return this.state;
+    return { ...this.state, config: this.config };
+  }
+
+  getConfig() {
+    return this.config;
+  }
+
+  updateConfig(request: UpdateAppConfigRequest) {
+    this.config = normalizeConfig({
+      ...this.config,
+      ...request,
+      updatedAt: now()
+    });
+    this.state.config = this.config;
+    this.normalizeState();
+    this.emit({ type: "workflow_updated", message: `实例配置已更新：${activeProfile(this.config).label} · ${this.config.dataMode}` });
+    saveConfig(this.config);
+    return this.config;
   }
 
   subscribe(subscriber: Subscriber) {
@@ -158,31 +297,46 @@ export class MockStore {
   }
 
   private normalizeState() {
-    const knownProjects = [baseProject, ...otherProjects];
+    this.state.config = this.config;
+    const showMockData = mockDataEnabled(this.config);
+    const knownProjects = [baseProject];
     for (const project of knownProjects) {
       const existing = this.state.projects.find((item) => item.id === project.id);
       if (existing) Object.assign(existing, project);
       else this.state.projects.push(project);
+    }
+    this.state.projects = this.state.projects.filter((project) => showMockData || project.id === baseProject.id);
+    if (!showMockData) {
+      this.state.sessions = [];
+      this.state.qaRuns = [];
+      this.state.events = this.state.events.filter((event) => !event.sessionId);
     }
     const main = this.state.sessions.find((session) => session.id === "mock-main");
     if (main) {
       main.provider = main.provider === "mock" ? "codex" : main.provider;
       main.model = main.model === "Codex 默认" ? "codex-default" : main.model;
       main.reasoning ||= "xhigh";
+      main.automationProfile = this.config.automationProfile;
+      main.sandbox = activeProfile(this.config).sandbox;
+      main.approvalPolicy = activeProfile(this.config).approvalPolicy;
       main.title = normalizeTitle(main.title, "VSP-Coder 工作台会话");
       main.messages = normalizeMessages(main.messages);
       main.cards = normalizeCards(main.cards);
     }
-    if (!this.state.sessions.some((session) => session.id === "mock-mobile")) {
+    if (showMockData && !this.state.sessions.some((session) => session.id === "mock-main")) {
+      const seeded = seedState(this.config).sessions[0];
+      if (seeded) this.state.sessions.push(seeded);
+    }
+    if (showMockData && !this.state.sessions.some((session) => session.id === "mock-mobile")) {
       this.state.sessions.push(mockSession("mock-mobile", baseProject.id, "移动端工作台调整", "waiting_approval", "gpt-5.5", "high", -1000 * 60 * 22));
     }
-    if (!this.state.sessions.some((session) => session.id === "mock-workflow")) {
+    if (showMockData && !this.state.sessions.some((session) => session.id === "mock-workflow")) {
       this.state.sessions.push(mockSession("mock-workflow", baseProject.id, "Workflow 侧栏整理", "interrupted", "opencode-default", "medium", -1000 * 60 * 80));
     }
-    this.ensureProjectSession("hypo-workflow", "mock-hypo-workflow", "Hypo-Workflow Cycle 规划", "done", "codex-default", "high", -1000 * 60 * 36);
-    this.ensureProjectSession("vsp-framework", "mock-vsp-framework", "VSP Framework 接口梳理", "idle", "claude-sonnet", "medium", -1000 * 60 * 54);
-    this.ensureProjectSession("hypo-agent", "mock-hypo-agent", "Hypo Agent Provider 接入", "running", "opencode-default", "medium", -1000 * 60 * 72);
     for (const session of this.state.sessions) {
+      session.automationProfile = this.config.automationProfile;
+      session.sandbox = activeProfile(this.config).sandbox;
+      session.approvalPolicy = activeProfile(this.config).approvalPolicy;
       session.title = normalizeTitle(session.title, session.title);
       session.messages = normalizeMessages(session.messages);
       session.cards = normalizeCards(session.cards);
@@ -213,10 +367,34 @@ export class MockStore {
   }
 
   private emit(event: Omit<VspEvent, "id" | "createdAt">) {
+    const duplicate = this.findRecentNoisyDuplicate(event);
+    if (duplicate) return duplicate;
     const full: VspEvent = { ...event, id: id("evt"), createdAt: now() };
     this.state.events.unshift(full);
     this.state.events = this.state.events.slice(0, 200);
     this.persist();
+    for (const subscriber of this.subscribers) subscriber(full);
+    return full;
+  }
+
+  private findRecentNoisyDuplicate(event: Omit<VspEvent, "id" | "createdAt">) {
+    if (!isNoisyCoalescableEvent(event)) return null;
+    const cutoff = Date.now() - 60_000;
+    return this.state.events.find((item) =>
+      item.type === event.type &&
+      item.message === event.message &&
+      item.sessionId === event.sessionId &&
+      item.projectId === event.projectId &&
+      new Date(item.createdAt).getTime() >= cutoff
+    ) || null;
+  }
+
+  recordEvent(event: Omit<VspEvent, "id" | "createdAt">) {
+    return this.emit(event);
+  }
+
+  publishTransientEvent(event: Omit<VspEvent, "id" | "createdAt">) {
+    const full: VspEvent = { ...event, id: id("evt"), createdAt: now() };
     for (const subscriber of this.subscribers) subscriber(full);
     return full;
   }
@@ -236,7 +414,7 @@ export class MockStore {
   }
 
   modelOptions() {
-    return modelOptions;
+    return modelOptions(this.config.dataMode);
   }
 
   createSession(request: CreateSessionRequest) {
@@ -251,7 +429,10 @@ export class MockStore {
       model: "codex-default",
       reasoning: "xhigh",
       cwd: project.path,
-      runnerOwner: "mock-user",
+      runnerOwner: "local-codex-user",
+      automationProfile: this.config.automationProfile,
+      sandbox: activeProfile(this.config).sandbox,
+      approvalPolicy: activeProfile(this.config).approvalPolicy,
       queue: [],
       messages: [
         {
@@ -259,7 +440,7 @@ export class MockStore {
           sessionId: "",
           role: "assistant",
           createdAt,
-          blocks: [{ type: "text", text: `已为 ${project.name} 创建新的本机会话。` }]
+          blocks: [{ type: "text", text: mockDataEnabled(this.config) ? `已为 ${project.name} 创建新的开发测试会话。` : "Codex app-server 将在 M02 接入；当前会话用于验证配置和 UI 状态。" }]
         }
       ],
       cards: [],
@@ -358,12 +539,21 @@ export class MockStore {
       emitted = true;
     }
 
+    if (action.type === "rename_session") {
+      const title = (action.value || "").trim();
+      if (!title) throw Object.assign(new Error("Rename title is required"), { status: 400 });
+      session.title = title;
+      message = `当前开发测试会话已重命名为 ${title}。`;
+      this.emit({ sessionId, projectId: session.projectId, type: "session_updated", message, payload: { localOnly: true } });
+      emitted = true;
+    }
+
     if (action.type === "upload_image_mock") message = "图片已加入当前会话。";
     if (action.type === "upload_file_mock") message = "文件已加入当前会话。";
     if (action.type === "switch_model" || action.type === "switch_model_mock") {
-      const option = modelOptions.find((item) =>
+      const option = modelOptions(this.config.dataMode).find((item) =>
         item.provider === (action.provider || session.provider) && item.model === (action.model || action.value)
-      ) || modelOptions[0];
+      ) || modelOptions(this.config.dataMode)[0];
       session.provider = option.provider;
       session.model = option.model;
       session.reasoning = action.reasoning || option.reasoning[0] || session.reasoning;
@@ -522,6 +712,8 @@ export class MockStore {
   }
 
   completions(): CompletionItem[] {
+    const codexHome = process.env.CODEX_HOME || join(homedir(), ".codex");
+    const skillRoot = process.env.VSP_SKILL_ROOT || join(codexHome, "skills");
     return [
       {
         id: "skill-plan",
@@ -529,7 +721,7 @@ export class MockStore {
         group: "Skills",
         label: "$hypo-workflow:plan",
         value: "hypo-workflow:plan",
-        path: "/home/heyx/.codex/skills/hypo-workflow/skills/plan/SKILL.md",
+        path: `${skillRoot}/hypo-workflow/skills/plan/SKILL.md`,
         description: "进入 Hypo-Workflow 规划模式",
         risk: "confirm"
       },
@@ -539,7 +731,7 @@ export class MockStore {
         group: "Skills",
         label: "$hypo-workflow:start",
         value: "hypo-workflow:start",
-        path: "/home/heyx/.codex/skills/hypo-workflow/skills/start/SKILL.md",
+        path: `${skillRoot}/hypo-workflow/skills/start/SKILL.md`,
         description: "开始执行 pipeline",
         risk: "confirm"
       },
@@ -587,18 +779,24 @@ export class MockStore {
   preview(tokenId: string) {
     const item = this.completions().find((entry) => entry.id === tokenId || entry.value === tokenId);
     if (!item) throw Object.assign(new Error("Preview target not found"), { status: 404 });
+    const resolvedPath = item.path ? resolvePreviewPath(item.path) : null;
+    const body = resolvedPath ? readPreviewBody(resolvedPath) : `${item.label}\n\n${item.description || ""}`.trim();
     return {
       title: item.label,
       kind: item.kind,
       path: item.path,
       description: item.description,
-      previewStatus: "placeholder",
-      body: "C1 只要求打开明确的预览界面；完整 Markdown/PDF/HTML 渲染在后续实现。"
+      previewStatus: resolvedPath ? "renderable" : "placeholder",
+      body
     };
   }
 
   workflow(projectId = "vsp-coder"): WorkflowSnapshot {
     const project = this.state.projects.find((entry) => entry.id === projectId) || baseProject;
+    return this.workflowForProject(project);
+  }
+
+  workflowForProject(project: Project): WorkflowSnapshot {
     const files = [
       ".pipeline/config.yaml",
       ".pipeline/state.yaml",
@@ -758,6 +956,9 @@ function mockSession(
     reasoning,
     cwd: projectRoot,
     runnerOwner: "mock-user",
+    automationProfile: "full_auto",
+    sandbox: "danger-full-access",
+    approvalPolicy: "never",
     queue: [],
     messages: [
       {
@@ -860,6 +1061,15 @@ function dedupeEvents(events: VspEvent[]) {
     if (!duplicate) kept.push(event);
   }
   return kept;
+}
+
+function isNoisyCoalescableEvent(event: Omit<VspEvent, "id" | "createdAt">) {
+  const payload = event.payload as { kind?: unknown } | undefined;
+  if (payload?.kind === "live_session_patch") return false;
+  return event.type === "warning" ||
+    event.type === "metric_updated" ||
+    event.type === "rate_limit_updated" ||
+    (event.type === "session_updated" && /^Codex app-server /.test(event.message));
 }
 
 function activityStatus(status: Session["status"]) {
