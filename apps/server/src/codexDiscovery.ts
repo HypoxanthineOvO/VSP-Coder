@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import type { Message, Metric, Project, Role, Session, SessionStatus } from "@vsp-coder/protocol";
 import type { CodexAppServerManager } from "./codex.js";
 import { artifactsFromCodexItem } from "./codexArtifacts.js";
+import { stripIdeContextWrapper } from "./codexText.js";
 
 type CodexThreadStatus = "idle" | "running" | "waiting_for_input" | "archived" | "unknown" | string;
 
@@ -209,16 +210,6 @@ function textMessage(sessionId: string, role: Role, text: string, id: string, cr
     providerItemRef: id,
     blocks: [{ type: "text", text }]
   };
-}
-
-function stripIdeContextWrapper(text: string) {
-  const marker = "My request for Codex:";
-  const normalized = text.trimStart();
-  if (!normalized.startsWith("Context from my IDE setup:")) return text;
-  const markerIndex = normalized.indexOf(marker);
-  if (markerIndex === -1) return text;
-  const request = normalized.slice(markerIndex + marker.length).trim();
-  return request || text;
 }
 
 function stringValue(value: unknown) {

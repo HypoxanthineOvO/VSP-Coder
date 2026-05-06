@@ -63,3 +63,27 @@ test("previewArtifact reads small text files inside the session cwd", () => {
 
   assert.equal(previewArtifact(session(root), artifact).body, "# hello");
 });
+
+test("previewArtifact strips IDE context wrapper from preview bodies", () => {
+  const root = mkdtempSync(join(tmpdir(), "vsp-preview-"));
+  const body = [
+    "Context from my IDE setup:",
+    "",
+    "Open tabs:",
+    "06-full-regression-and-cross-platform-smoke-readiness.report.md: .pipeline/reports/06-full-regression-and-cross-platform-smoke-readiness.report.md",
+    "architecture.md: .pipeline/architecture.md",
+    "",
+    "My request for Codex:",
+    "真实的会话"
+  ].join("\n");
+  const artifact: Artifact = {
+    id: "artifact-1",
+    sessionId: "thread-1",
+    kind: "file",
+    title: "Session preview",
+    body,
+    previewStatus: "renderable"
+  };
+
+  assert.equal(previewArtifact(session(root), artifact).body, "真实的会话");
+});

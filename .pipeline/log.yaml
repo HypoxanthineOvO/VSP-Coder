@@ -1,5 +1,14 @@
 entries:
   -
+    id: PATCH-FIX-P002-20260506T154205+0800
+    type: patch_fix
+    patch: P002
+    status: closed
+    commit: "(this commit)"
+    timestamp: "2026-05-06T15:42:05+08:00"
+    summary: Applied Codex IDE context wrapper stripping to right-side artifact, file, and skill preview paths.
+    tests: "npm test -w @vsp-coder/server passed; npm run typecheck passed; git diff --check passed"
+  -
     id: PATCH-FIX-P001-20260506T152900+0800
     type: patch_fix
     patch: P001

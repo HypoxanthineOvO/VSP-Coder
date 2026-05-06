@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { extname, resolve, sep } from "node:path";
 import type { Artifact, Session } from "@vsp-coder/protocol";
+import { stripIdeContextWrapper } from "./codexText.js";
 
 export type PreviewResponse = {
   title: string;
@@ -21,7 +22,7 @@ export function previewArtifact(session: Session, artifact: Artifact): PreviewRe
       path: artifact.path,
       description: artifact.status ? `status: ${artifact.status}` : artifact.mime,
       previewStatus: artifact.previewStatus,
-      body: artifact.body
+      body: stripIdeContextWrapper(artifact.body)
     };
   }
 
@@ -41,7 +42,7 @@ export function previewArtifact(session: Session, artifact: Artifact): PreviewRe
     path: artifact.path,
     description: artifact.mime || "text/plain",
     previewStatus: "renderable",
-    body: readFileSync(file, "utf8")
+    body: stripIdeContextWrapper(readFileSync(file, "utf8"))
   };
 }
 

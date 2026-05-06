@@ -26,6 +26,7 @@ import type {
   WorkflowMilestone,
   WorkflowSnapshot
 } from "@vsp-coder/protocol";
+import { stripIdeContextWrapper } from "./codexText.js";
 
 export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const storeFile = join(projectRoot, ".vsp-coder", "mock-store", "state.json");
@@ -780,7 +781,7 @@ export class MockStore {
     const item = this.completions().find((entry) => entry.id === tokenId || entry.value === tokenId);
     if (!item) throw Object.assign(new Error("Preview target not found"), { status: 404 });
     const resolvedPath = item.path ? resolvePreviewPath(item.path) : null;
-    const body = resolvedPath ? readPreviewBody(resolvedPath) : `${item.label}\n\n${item.description || ""}`.trim();
+    const body = stripIdeContextWrapper(resolvedPath ? readPreviewBody(resolvedPath) : `${item.label}\n\n${item.description || ""}`.trim());
     return {
       title: item.label,
       kind: item.kind,
