@@ -1,5 +1,14 @@
 entries:
   -
+    id: PATCH-FIX-P001-20260506T152900+0800
+    type: patch_fix
+    patch: P001
+    status: closed
+    commit: "(this commit)"
+    timestamp: "2026-05-06T15:29:00+08:00"
+    summary: Stripped Codex IDE setup wrapper from displayed user messages while preserving the real request body.
+    tests: "npm test -w @vsp-coder/server passed; npm run typecheck passed; git diff --check passed"
+  -
     id: CYCLE-CLOSE-C2-20260506T152000+0800
     type: cycle_close
     ref: C2

@@ -53,3 +53,35 @@ test("messagesFromTurns maps Codex thread items into VSP messages", () => {
   assert.equal(messages[1]?.blocks[0]?.type, "text");
   assert.match(messages[3]?.blocks[0]?.type === "text" ? messages[3].blocks[0].text : "", /Subagent trace/);
 });
+
+test("messagesFromTurns strips IDE context wrapper from Codex user messages", () => {
+  const messages = messagesFromTurns("thread-1", [
+    {
+      id: "turn-1",
+      status: "completed",
+      startedAt: 1_700_000_000,
+      completedAt: 1_700_000_010,
+      durationMs: 10_000,
+      items: [
+        {
+          type: "userMessage",
+          id: "item-user",
+          content: [{
+            type: "text",
+            text: [
+              "Context from my IDE setup:",
+              "",
+              "Open tabs:",
+              "architecture.md: .pipeline/architecture.md",
+              "",
+              "My request for Codex:",
+              "真实的会话"
+            ].join("\n")
+          }]
+        }
+      ]
+    }
+  ]);
+  assert.equal(messages[0]?.blocks[0]?.type, "text");
+  assert.equal(messages[0]?.blocks[0]?.type === "text" ? messages[0].blocks[0].text : "", "真实的会话");
+});

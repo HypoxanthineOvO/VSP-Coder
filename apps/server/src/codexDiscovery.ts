@@ -155,7 +155,8 @@ export function messageFromCodexItem(sessionId: string, item: unknown, createdAt
       })
       .filter(Boolean)
       .join("\n");
-    return text ? [textMessage(sessionId, "user", text, id, createdAt)] : [];
+    const displayText = stripIdeContextWrapper(text);
+    return displayText ? [textMessage(sessionId, "user", displayText, id, createdAt)] : [];
   }
   if (type === "agentMessage") return [textMessage(sessionId, "assistant", stringValue(record.text), id, createdAt)];
   if (type === "plan") return [textMessage(sessionId, "assistant", stringValue(record.text), id, createdAt)];
@@ -208,6 +209,16 @@ function textMessage(sessionId: string, role: Role, text: string, id: string, cr
     providerItemRef: id,
     blocks: [{ type: "text", text }]
   };
+}
+
+function stripIdeContextWrapper(text: string) {
+  const marker = "My request for Codex:";
+  const normalized = text.trimStart();
+  if (!normalized.startsWith("Context from my IDE setup:")) return text;
+  const markerIndex = normalized.indexOf(marker);
+  if (markerIndex === -1) return text;
+  const request = normalized.slice(markerIndex + marker.length).trim();
+  return request || text;
 }
 
 function stringValue(value: unknown) {
