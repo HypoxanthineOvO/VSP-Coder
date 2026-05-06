@@ -1,5 +1,14 @@
 entries:
   -
+    id: CYCLE-CLOSE-C2-20260506T152000+0800
+    type: cycle_close
+    ref: C2
+    status: completed
+    timestamp: "2026-05-06T15:20:00+08:00"
+    summary: Archived C2 Codex Session Adapter after v0.2.0 release and restarted local service on port 4180.
+    report: .pipeline/archives/C2-codex-session-adapter/summary.md
+    trigger: manual
+  -
     id: RELEASE-v0.2.0-C2-20260506T150039+0800
     type: release
     ref: v0.2.0

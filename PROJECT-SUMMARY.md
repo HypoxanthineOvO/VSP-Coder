@@ -2,9 +2,9 @@
 
 This file is a generated Hypo-Workflow project summary. Edit authority files under `.pipeline/`, then run `/hw:sync --repair`.
 
-- Pipeline status: completed
-- Cycle: 2
-- Current: Observability, Event Coalescing, And Subagent Trace
-- Step: release
-- Progress: 12/12
-- Progress note: 状态: C2 executing - M12 manual validation
+- Pipeline status: unknown
+- Cycle: n/a
+- Current: n/a
+- Step: n/a
+- Progress: n/a/n/a
+- Progress note: See .pipeline/PROGRESS.md
