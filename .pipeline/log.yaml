@@ -1,5 +1,14 @@
 entries:
   -
+    id: PATCH-FIX-P003-20260506T155807+0800
+    type: patch_fix
+    patch: P003
+    status: closed
+    commit: "(this commit)"
+    timestamp: "2026-05-06T15:58:07+08:00"
+    summary: Added frontend message-flow sanitization so cached, detailed, live, and rendered conversation messages hide Codex IDE context wrappers.
+    tests: "npm run typecheck passed; npm test -w @vsp-coder/server passed; npm run build passed; git diff --check passed"
+  -
     id: PATCH-FIX-P002-20260506T154205+0800
     type: patch_fix
     patch: P002

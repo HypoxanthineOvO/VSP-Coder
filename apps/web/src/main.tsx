@@ -103,6 +103,50 @@ const initialToolDisplayMode = (): ToolDisplayMode => {
   return window.localStorage.getItem("vsp-coder-tool-display-mode") === "detailed" ? "detailed" : "simple";
 };
 
+const IDE_CONTEXT_HEADER = "Context from my IDE setup:";
+const IDE_REQUEST_MARKER = "My request for Codex:";
+
+function stripIdeContextWrapper(text: string) {
+  const normalized = text.trimStart();
+  if (!normalized.startsWith(IDE_CONTEXT_HEADER)) return text;
+  const markerIndex = normalized.indexOf(IDE_REQUEST_MARKER);
+  if (markerIndex === -1) return text;
+  const request = normalized.slice(markerIndex + IDE_REQUEST_MARKER.length).trim();
+  return request || text;
+}
+
+function sanitizeMessageText(message: Message): Message {
+  let changed = false;
+  const blocks = message.blocks.map((block) => {
+    if (block.type !== "text") return block;
+    const text = stripIdeContextWrapper(block.text);
+    if (text === block.text) return block;
+    changed = true;
+    return { ...block, text };
+  });
+  return changed ? { ...message, blocks } : message;
+}
+
+function sanitizeMessages(messages: Message[]) {
+  return messages.map(sanitizeMessageText);
+}
+
+function sanitizeSessionMessages(session: Session): Session {
+  return { ...session, messages: sanitizeMessages(session.messages) };
+}
+
+function sanitizeStateMessages(state: VspState): VspState {
+  return { ...state, sessions: state.sessions.map(sanitizeSessionMessages) };
+}
+
+function sanitizeLivePatch(patch: LiveSessionPatch): LiveSessionPatch {
+  return {
+    ...patch,
+    messageDelta: patch.messageDelta ? { ...patch.messageDelta, text: stripIdeContextWrapper(patch.messageDelta.text) } : undefined,
+    finalMessages: patch.finalMessages ? sanitizeMessages(patch.finalMessages) : undefined
+  };
+}
+
 function insertCompletionText(draft: string, item: CompletionItem) {
   const insert = completionInsertText(item);
   const next = draft.replace(/\S*$/, insert);
@@ -154,6 +198,8 @@ const markdownSanitizeSchema = {
 };
 
 function mergeStatePreservingDetails(previous: VspState | null, next: VspState): VspState {
+  previous = previous ? sanitizeStateMessages(previous) : previous;
+  next = sanitizeStateMessages(next);
   if (!previous) return next;
   const previousById = new Map(previous.sessions.map((session) => [session.id, session]));
   const nextIds = new Set(next.sessions.map((session) => session.id));
@@ -203,14 +249,16 @@ type ArtifactUpdate = Artifact & {
 };
 
 function patchSession(session: Session, patch: LiveSessionPatch): Session {
+  const cleanPatch = sanitizeLivePatch(patch);
+  const cleanSession = sanitizeSessionMessages(session);
   return {
-    ...session,
-    title: patch.title || session.title,
-    status: patch.status || session.status,
-    currentTurnId: typeof patch.currentTurnId === "undefined" ? session.currentTurnId : patch.currentTurnId || undefined,
-    metric: patch.metric ? { ...session.metric, ...patch.metric, updatedAt: patch.metric.updatedAt || new Date().toISOString() } : session.metric,
-    messages: patchMessages(session.id, session.messages, patch),
-    artifacts: patch.artifactUpdates ? mergeArtifactUpdates(session.artifacts, patch.artifactUpdates) : session.artifacts,
+    ...cleanSession,
+    title: cleanPatch.title || cleanSession.title,
+    status: cleanPatch.status || cleanSession.status,
+    currentTurnId: typeof cleanPatch.currentTurnId === "undefined" ? cleanSession.currentTurnId : cleanPatch.currentTurnId || undefined,
+    metric: cleanPatch.metric ? { ...cleanSession.metric, ...cleanPatch.metric, updatedAt: cleanPatch.metric.updatedAt || new Date().toISOString() } : cleanSession.metric,
+    messages: patchMessages(cleanSession.id, cleanSession.messages, cleanPatch),
+    artifacts: cleanPatch.artifactUpdates ? mergeArtifactUpdates(cleanSession.artifacts, cleanPatch.artifactUpdates) : cleanSession.artifacts,
     updatedAt: new Date().toISOString()
   };
 }
@@ -260,6 +308,8 @@ function patchMessages(sessionId: string, messages: Message[], patch: LiveSessio
 }
 
 function mergeDetailedSession(existing: Session, detail: Session): Session {
+  existing = sanitizeSessionMessages(existing);
+  detail = sanitizeSessionMessages(detail);
   return {
     ...detail,
     model: existing.model || detail.model,
@@ -283,6 +333,8 @@ function mergeDetailedMessages(existing: Message[], detail: Message[]) {
 }
 
 function mergeMessagePreferLive(existing: Message | undefined, detail: Message): Message {
+  existing = existing ? sanitizeMessageText(existing) : existing;
+  detail = sanitizeMessageText(detail);
   if (!existing) return detail;
   const existingText = messagePlainText(existing);
   const detailText = messagePlainText(detail);
@@ -1370,6 +1422,7 @@ function MessageBubble({ session, message, openPreview }: {
   message: Message;
   openPreview: (token: StructuredToken) => void;
 }) {
+  message = sanitizeMessageText(message);
   if (message.role === "tool") {
     return (
       <div className="tool-inline-row">
