@@ -1,5 +1,13 @@
 entries:
   -
+    id: RELEASE-GITHUB-v0.2.0-20260507T160923+0800
+    type: release
+    ref: v0.2.0
+    status: ready
+    timestamp: "2026-05-07T16:09:23+08:00"
+    summary: Prepared GitHub publication for VSP-Coder with Hypo-Workflow sync repair, docs freshness review, typecheck, tests, build, diff check, and existing v0.2.0 tag.
+    trigger: user
+  -
     id: PATCH-FIX-P003-20260506T155807+0800
     type: patch_fix
     patch: P003
