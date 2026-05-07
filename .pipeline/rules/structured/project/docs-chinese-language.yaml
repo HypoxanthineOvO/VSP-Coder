@@ -1,0 +1,22 @@
+id: docs-chinese-language
+scope: project
+label: style
+severity: error
+hooks:
+  - always
+  - pre-commit
+  - pre-release
+source:
+  captured_from: chat
+  author: user
+content:
+  instruction: "README 等面向用户、发布和项目说明的文档必须使用中文。"
+  rationale: "项目发布和维护文档需要面向中文读者保持一致。"
+  examples:
+    good:
+      - "README.md、docs/*.md、CHANGELOG.md、PROJECT-SUMMARY.md 使用中文撰写。"
+    bad:
+      - "README.md 或发布说明继续保留英文主体内容。"
+enforcement:
+  check_kind: agent_judgment
+  evidence_required: true

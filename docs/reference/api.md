@@ -1,17 +1,14 @@
-# API Reference
+# API 参考
 
-VSP-Coder exposes a local HTTP API used by the web workbench. C2 replaces the
-old mock session contract with a real Codex-backed provider while keeping a
-small adapter boundary for future providers.
+VSP-Coder 暴露一组本地 HTTP API，供 web 工作台使用。C2 已用真实 Codex provider 替换旧 mock session 契约，同时保留小而清晰的 adapter 边界，方便后续接入其他 provider。
 
-All endpoints are local-first. The default server port is configurable with
-`PORT` or `VSP_CODER_PORT`.
+所有端点都以 local-first 为前提。默认服务端口可以通过 `PORT` 或 `VSP_CODER_PORT` 配置。
 
 ## Health
 
 `GET /api/health`
 
-Returns server readiness.
+返回服务就绪状态。
 
 ```json
 { "ok": true }
@@ -21,38 +18,33 @@ Returns server readiness.
 
 `GET /api/state`
 
-Returns the complete UI snapshot:
+返回完整 UI 快照：
 
-- provider runtime status and automation policy
-- discovered Codex projects and sessions
-- recent sessions
-- selected session transcript
-- queue items
-- model and reasoning selection
-- artifacts, command events, file edits, approvals, and diagnostics
+- provider 运行时状态和自动化策略；
+- 已发现的 Codex projects 和 sessions；
+- 最近会话；
+- 当前选中会话的 transcript；
+- 队列项；
+- 模型和 reasoning 选择；
+- artifacts、command events、file edits、approvals 和 diagnostics。
 
-The UI treats this response as a cacheable snapshot and updates it from SSE
-refresh signals.
+UI 会把该响应当作可缓存快照，并通过 SSE refresh signals 更新它。
 
 ## Events
 
 `GET /api/events`
 
-Opens a Server-Sent Events stream. Events are emitted as `vsp` events and carry
-small refresh hints rather than full session payloads.
+打开 Server-Sent Events stream。事件以 `vsp` event 形式发送，携带小型刷新提示，而不是完整 session payload。
 
-Consumers should refresh the affected state from `GET /api/state` and preserve
-local scroll/input state when possible.
+消费者应从 `GET /api/state` 刷新受影响状态，并尽量保留本地滚动位置和输入状态。
 
 ## Models
 
 `GET /api/models`
 
-Returns the model and reasoning options available for the active provider.
-For Codex, the list is derived from the provider capability surface rather than
-from a fixed frontend enum.
+返回当前 provider 可用的模型和 reasoning 选项。对 Codex 来说，列表来自 provider capability surface，而不是前端固定 enum。
 
-Each item includes:
+每个条目包含：
 
 - `provider`
 - `model`
@@ -65,23 +57,23 @@ Each item includes:
 
 `POST /api/provider/start`
 
-Starts the configured provider runner when it is not already running.
+当配置的 provider runner 尚未运行时启动它。
 
 `POST /api/provider/stop`
 
-Stops the provider runner owned by this server.
+停止由当前 server 拥有的 provider runner。
 
 `POST /api/provider/restart`
 
-Restarts only the provider runner owned by this server.
+仅重启由当前 server 拥有的 provider runner。
 
 ## Sessions
 
 `POST /api/sessions`
 
-Creates a new session for a discovered or explicitly selected project.
+为已发现或显式选择的项目创建新 session。
 
-Request body:
+请求体：
 
 ```json
 {
@@ -94,10 +86,9 @@ Request body:
 
 `POST /api/sessions/:id`
 
-Queues a user message for an existing session. The server appends the item to
-its local queue and steers the real Codex runner.
+为已有 session 排队一条用户消息。server 会把该项加入本地队列，并驱动真实 Codex runner。
 
-Request body:
+请求体：
 
 ```json
 {
@@ -109,7 +100,7 @@ Request body:
 
 `POST /api/sessions/:id/actions`
 
-Runs a session-level action. Supported C2 actions include:
+执行 session 级动作。C2 支持的动作包括：
 
 - `switch_model`
 - `rename`
@@ -123,38 +114,31 @@ Runs a session-level action. Supported C2 actions include:
 - `workflow_sync`
 - `config_update`
 
-Rename is persisted through the Codex session storage path exposed by the
-provider adapter, matching the durable behavior users see after refresh.
+重命名会通过 provider adapter 暴露的 Codex session storage path 持久化；刷新后用户看到的持久行为与 Codex 保持一致。
 
 ## Workflow
 
 `GET /api/workflow?projectId=<id>`
 
-Returns Hypo-Workflow project information when the selected project contains a
-`.pipeline/` workspace:
+当选中项目包含 `.pipeline/` workspace 时，返回 Hypo-Workflow 项目信息：
 
-- milestone progress
-- compact plan text
-- config items
-- architecture references
-- knowledge root
-- `hasWorkflow`
+- milestone 进度；
+- compact plan 文本；
+- config items；
+- architecture references；
+- knowledge root；
+- `hasWorkflow`。
 
 ## Preview
 
 `GET /api/preview/:id`
 
-Returns sanitized preview content for supported skills, commands, and files.
-The preview surface is intentionally bounded and should not be treated as a
-general filesystem read endpoint.
+返回受支持 skills、commands 和 files 的安全预览内容。preview surface 有意保持边界，不应被当作通用 filesystem read endpoint 使用。
 
 ## Temporary QA
 
 `POST /api/qa/tmp-session`
 
-Development-only helper used by the C2 acceptance flow. It creates a temporary
-Codex-style session under the operating system temporary directory and returns
-its generated project/session metadata.
+仅用于开发环境的辅助端点，服务于 C2 acceptance flow。它会在操作系统临时目录下创建一个临时 Codex-style session，并返回生成的 project/session 元数据。
 
-This endpoint must not hardcode a user path and must not be required for normal
-deployment.
+该端点不得硬编码用户路径，也不应成为正常部署所需条件。

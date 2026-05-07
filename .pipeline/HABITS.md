@@ -16,6 +16,10 @@ This file is generated from structured Rules/Habits authority. Edit structured r
 - **cycle-closed** [builtin/warn/guard]
   - Check that the previous explicit Cycle was closed before starting a new delivery lane.
   - hooks: pre-milestone
+- **docs-chinese-language** [project/error/style]
+  - README 等面向用户、发布和项目说明的文档必须使用中文。
+  - hooks: always, pre-commit, pre-release
+  - source: .pipeline/rules/structured/project/docs-chinese-language.yaml
 - **git-clean-check** [builtin/warn/guard]
   - Check whether the Git working tree has uncommitted changes before milestone execution.
   - hooks: pre-milestone

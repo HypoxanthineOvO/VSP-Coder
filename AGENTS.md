@@ -30,6 +30,7 @@ When `execution.steps.preset=analysis`, read `.opencode/hypo-workflow.json.analy
 Structured Rules/Habits are authority; Markdown habits and platform instructions are derived views.
 
 - conflict-check (builtin/warn/guard): Detect incompatible local agent plugins or hook systems at session start.
+- docs-chinese-language (project/error/style): README 等面向用户、发布和项目说明的文档必须使用中文。
 - plan-tool-required (builtin/warn/workflow): Complex planning and execution work must maintain a visible plan/todo state.
 - progress-timezone (builtin/warn/style): Keep PROGRESS timestamps aligned with output.timezone.
 - report-language (builtin/warn/style): Keep reports and generated summaries aligned with output.language.

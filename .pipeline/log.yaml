@@ -1,5 +1,13 @@
 entries:
   -
+    id: RELEASE-v0.2.1-20260507T195853+0800
+    type: release
+    ref: v0.2.1
+    status: ready
+    timestamp: "2026-05-07T19:58:53+08:00"
+    summary: Prepared v0.2.1 release with Chinese documentation rule, Chinese README/docs/changelog/project summary, AGPL-3.0-or-later license, refreshed README presentation, workspace version bump, sync check, typecheck, tests, build, and diff check.
+    trigger: user
+  -
     id: RELEASE-GITHUB-v0.2.0-20260507T160923+0800
     type: release
     ref: v0.2.0

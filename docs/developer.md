@@ -1,57 +1,57 @@
-# Developer Guide
+# 开发者指南
 
-VSP-Coder is a TypeScript npm workspace.
+VSP-Coder 是一个 TypeScript npm workspace。
 
-## Workspace Layout
+## Workspace 布局
 
-| Path | Role |
+| 路径 | 作用 |
 |---|---|
-| `packages/protocol` | Shared provider-neutral protocol types and helpers. |
-| `apps/server` | Node HTTP server, Codex app-server client, SSE event stream, local store, and static web serving. |
-| `apps/web` | React/Vite workbench UI. |
-| `scripts` | Local deployment helpers. |
-| `.pipeline` | Hypo-Workflow planning, progress, reports, and knowledge files. |
+| `packages/protocol` | 共享的 provider-neutral 协议类型和辅助函数。 |
+| `apps/server` | Node HTTP server、Codex app-server client、SSE event stream、本地 store 和静态 web 服务。 |
+| `apps/web` | React/Vite 工作台 UI。 |
+| `scripts` | 本地部署辅助脚本。 |
+| `.pipeline` | Hypo-Workflow 规划、进度、报告和知识文件。 |
 
-## Runtime Contract
+## 运行时契约
 
-The server exposes a local API:
+服务端暴露本地 API：
 
-- `/api/state` returns workbench state.
-- `/api/models` returns Codex model options from Codex `model/list` when available.
-- `/api/workflow` returns Hypo-Workflow project status.
-- `/api/sessions` creates Codex threads in discovered project directories.
-- `/api/sessions/:id` hydrates or sends messages to Codex sessions.
-- `/api/sessions/:id/actions` handles rename, interrupt, queue, settings, and workflow actions.
-- `/api/events` streams provider-neutral live patches and lifecycle events.
+- `/api/state` 返回工作台状态。
+- `/api/models` 在可用时从 Codex `model/list` 返回 Codex 模型选项。
+- `/api/workflow` 返回 Hypo-Workflow 项目状态。
+- `/api/sessions` 在已发现项目目录中创建 Codex threads。
+- `/api/sessions/:id` 为 Codex 会话补全历史或发送消息。
+- `/api/sessions/:id/actions` 处理重命名、中断、队列、设置和 workflow 动作。
+- `/api/events` 流式输出 provider-neutral live patches 和生命周期事件。
 
-Local runtime files live under `.vsp-coder/` and are ignored by git.
+本地运行时文件位于 `.vsp-coder/`，并已被 git 忽略。
 
-## Deployment Helper
+## 部署辅助命令
 
-`npm run deploy:local` builds the workspace, finds an available port, starts the built server, waits for `/api/health`, then writes `.vsp-coder/deployment.json`.
+`npm run deploy:local` 会构建 workspace、寻找可用端口、启动构建后的服务、等待 `/api/health`，然后写入 `.vsp-coder/deployment.json`。
 
-The helper accepts:
+支持的参数：
 
 - `--start-port=<port>`
 - `--port=<port>`
 - `--host=<host>`
 - `--no-build`
 
-## Port Configuration
+## 端口配置
 
-The built server reads port and host in this order:
+构建后的 server 按以下顺序读取端口：
 
 1. `PORT`
 2. `VSP_CODER_PORT`
-3. default `4180`
+3. 默认值 `4180`
 
-Host is read from `HOST`, then `VSP_CODER_HOST`, then `0.0.0.0`.
+host 按顺序读取 `HOST`、`VSP_CODER_HOST`，最后回退到 `0.0.0.0`。
 
-The Vite dev proxy reads `VITE_API_TARGET`, then falls back to the same port variables.
+Vite dev proxy 会读取 `VITE_API_TARGET`，未设置时回退到同一组端口变量。
 
-## Verification
+## 验证
 
-Run the full local gate before release:
+发布前运行完整本地 gate：
 
 ```bash
 npm run typecheck
@@ -60,12 +60,12 @@ npm run build
 git diff --check
 ```
 
-## Provider Notes
+## Provider 说明
 
-C2 ships a real Codex adapter. OpenCode and Claude Code are not active adapters in this release; their future integrations should use the provider protocol documented under `.pipeline/knowledge/reference/`.
+C2 发布包含真实 Codex adapter。OpenCode 和 Claude Code 在当前版本中不是活动 adapter；后续集成应使用 `.pipeline/knowledge/reference/` 下记录的 provider protocol。
 
-## Safety Notes
+## 安全说明
 
-- Do not hardcode user paths or machine-specific LAN URLs.
-- Do not kill by port alone when restarting local services.
-- Before stopping a local deployment, verify PID, command, and working directory.
+- 不要硬编码用户路径或机器专属的局域网 URL。
+- 重启本地服务时不要只按端口杀进程。
+- 停止本地部署前，必须验证 PID、命令和工作目录。
