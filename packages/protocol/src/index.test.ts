@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { textMessage, type AppConfig, type StructuredToken } from "./index.js";
+import { textMessage, type AppConfig, type StructuredToken, type SubagentTrace } from "./index.js";
 
 test("textMessage creates a serializable message", () => {
   const message = textMessage("s1", "user", "hello", "m1", "2026-05-04T00:00:00.000Z");
@@ -20,6 +20,23 @@ test("structured token metadata survives JSON roundtrip", () => {
   const parsed = JSON.parse(JSON.stringify(token)) as StructuredToken;
   assert.equal(parsed.kind, "skill");
   assert.equal(parsed.path?.endsWith("SKILL.md"), true);
+});
+
+test("subagent trace block declares interaction capability explicitly", () => {
+  const trace: SubagentTrace = {
+    id: "agent-1",
+    status: "running",
+    agentName: "Gauss",
+    agentType: "explorer",
+    method: "subagent/status",
+    summary: "auditing implementation",
+    interaction: {
+      supported: false,
+      reason: "Provider did not expose a continuation channel.",
+      actions: [{ id: "open_detail", label: "查看详情", enabled: true }]
+    }
+  };
+  assert.equal(JSON.parse(JSON.stringify(trace)).interaction.supported, false);
 });
 
 test("app config exposes deployment and automation profile state", () => {

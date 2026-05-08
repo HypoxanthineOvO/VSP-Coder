@@ -1,0 +1,125 @@
+version: 1
+language: zh-CN
+generated_at: "2026-05-07T21:54:23+08:00"
+source: "C3 M0 post-audit plan-review"
+status: applied
+requires_user_confirmation: false
+applied_at: "2026-05-07T21:58:25+08:00"
+applied_by: "user-confirmed plan review"
+review_report: ".pipeline/reports/M0-post-audit-plan-review.md"
+input_reports:
+  - ".pipeline/reports/M0-audit.md"
+  - ".pipeline/reports/M0-known-bug-root-cause-matrix.md"
+  - ".pipeline/reports/M0-frontend-cache-refresh-performance-audit.md"
+  - ".pipeline/reports/M0-subagent-review-of-supplemental-audit.md"
+summary:
+  decision: "Propose rebaselining pending milestones M1-M7 into M1-M8 without changing completed M0."
+  rationale:
+    - "M0 supplemental audit found direct message-loss paths that must be fixed before reasoning/error/motion work."
+    - "Subagent review confirmed a dedicated message lifecycle/cache consistency milestone is needed."
+    - "Plan Review must not rewrite downstream prompts directly; this queue records proposed edits for confirmation."
+proposals:
+  - id: "C3-M0-PLANREVIEW-M1"
+    status: applied
+    change_type: update_prompt
+    milestone_id: M1
+    prompt_file: ".pipeline/prompts/01-playwright-screenshot-baseline.md"
+    title: "Expand M1 into message lifecycle red-light baseline"
+    proposed_changes:
+      - "Add red tests for duplicate same-text messages surviving refresh/final merge."
+      - "Add server test coverage for mergeProviderRefresh preserving previous live-only messages."
+      - "Add frontend merge tests or E2E fixtures for stale non-empty /api/state not overwriting newer live messages."
+      - "Add E2E for send-then-refresh optimistic message visibility."
+      - "Add queue-in-main-message-flow expectation as a red test."
+      - "Add SSE onerror/reconnect, refresh event noise limit, and 500+ message performance baseline checks."
+    validation:
+      - "npm run test"
+      - "npm run e2e -- --project=chromium"
+      - "npm run screenshots -- --project=chromium"
+  - id: "C3-M0-PLANREVIEW-M2-NEW"
+    status: applied
+    change_type: replace_pending_milestone
+    milestone_id: M2
+    old_name: "会话选择与 reasoning 控制面可靠性"
+    proposed_name: "消息生命周期与缓存一致性"
+    proposed_prompt_file: ".pipeline/prompts/02-message-lifecycle-cache-consistency.md"
+    objective: "修复刷新吞消息、重复消息丢失、缺少 optimistic outbound、server/provider refresh 覆盖 live-only messages、前端 stale response 落地和 queue 收敛问题。"
+    scope:
+      - "Introduce clientMutationId or equivalent outbound identity."
+      - "Add optimistic user messages for Codex send and busy queue paths."
+      - "Change message merge to providerItemRef/id-first; content dedupe only allowed inside same provider item reconciliation."
+      - "Rewrite server mergeProviderRefresh message merge to preserve previous live-only messages until provider confirms or supersedes them."
+      - "Add session freshness metadata and front-end request generation/AbortController for state/detail refresh."
+      - "Define queue item sent/confirmed/failed/cleared convergence tied to outbound message identity."
+    validation:
+      - "npm run test"
+      - "npm run e2e -- --project=chromium --grep \"message|refresh|queue|cache\""
+  - id: "C3-M0-PLANREVIEW-M3"
+    status: applied
+    change_type: move_and_update_prompt
+    old_milestone_id: M2
+    new_milestone_id: M3
+    old_prompt_file: ".pipeline/prompts/02-session-reasoning-reliability.md"
+    proposed_prompt_file: ".pipeline/prompts/03-session-reasoning-reliability.md"
+    proposed_name: "会话选择与 reasoning 控制面可靠性"
+    proposed_changes:
+      - "Keep last selected project/session restore and explainable fallback."
+      - "Keep model/reasoning pending/success/failed/rollback/retry state machine."
+      - "Use M2 message lifecycle/freshness primitives instead of adding another cache strategy here."
+      - "Ensure reasoning failures emit unified AppError hooks for M4."
+  - id: "C3-M0-PLANREVIEW-M4"
+    status: applied
+    change_type: move_and_update_prompt
+    old_milestone_id: M3
+    new_milestone_id: M4
+    old_prompt_file: ".pipeline/prompts/03-error-cards-retry-recovery.md"
+    proposed_prompt_file: ".pipeline/prompts/04-error-cards-retry-recovery.md"
+    proposed_name: "错误事件、底部错误卡片与分级恢复"
+    proposed_changes:
+      - "Depend on M2 outbound identity and queue state."
+      - "Render send failure, refresh failure, stale cache warning, SSE onerror, 429, 502 and provider errors in bottom cards."
+      - "Retry actions must target the correct message/session/queue item."
+  - id: "C3-M0-PLANREVIEW-M5"
+    status: applied
+    change_type: move_prompt
+    old_milestone_id: M4
+    new_milestone_id: M5
+    old_prompt_file: ".pipeline/prompts/04-responsive-shell-navigation.md"
+    proposed_prompt_file: ".pipeline/prompts/05-responsive-shell-navigation.md"
+    proposed_name: "响应式工作台外壳与导航可达性"
+  - id: "C3-M0-PLANREVIEW-M6"
+    status: applied
+    change_type: move_and_update_prompt
+    old_milestone_id: M5
+    new_milestone_id: M6
+    old_prompt_file: ".pipeline/prompts/05-motion-system-send-performance.md"
+    proposed_prompt_file: ".pipeline/prompts/06-motion-system-send-performance.md"
+    proposed_name: "统一前端动效体系、发送性能与事件降噪"
+    proposed_changes:
+      - "Keep motion tokens, reduced motion, send animation and panel/list transitions."
+      - "Add message render memoization or segmentation strategy based on M1 performance baseline."
+      - "Add refresh event coalescing/noise limits so Activity and SSE do not re-render continuously."
+      - "Treat 500+ message performance as a measured baseline, not an unverified claim."
+  - id: "C3-M0-PLANREVIEW-M7"
+    status: applied
+    change_type: move_prompt
+    old_milestone_id: M6
+    new_milestone_id: M7
+    old_prompt_file: ".pipeline/prompts/06-subagent-trace-interaction.md"
+    proposed_prompt_file: ".pipeline/prompts/07-subagent-trace-interaction.md"
+    proposed_name: "Subagent trace 识别、详情与交互入口"
+  - id: "C3-M0-PLANREVIEW-M8"
+    status: applied
+    change_type: move_and_update_prompt
+    old_milestone_id: M7
+    new_milestone_id: M8
+    old_prompt_file: ".pipeline/prompts/07-regression-hardening-docs.md"
+    proposed_prompt_file: ".pipeline/prompts/08-regression-hardening-docs.md"
+    proposed_name: "全量回归、扩展性硬化与文档同步"
+    proposed_changes:
+      - "Close both original known bug matrix and supplemental message lifecycle/cache findings."
+      - "Include final table for fixed/deferred/accepted risk across M0 and M0 supplemental reports."
+      - "Update Chinese docs for message recovery, error cards, last selection, Subagent trace and responsive/motion behavior."
+recommended_next_action:
+  kind: "start_or_resume"
+  prompt: "Ready to execute the rebaselined M1 when the user starts or resumes the Cycle."

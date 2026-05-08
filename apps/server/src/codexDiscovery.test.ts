@@ -51,7 +51,8 @@ test("messagesFromTurns maps Codex thread items into VSP messages", () => {
   ]);
   assert.deepEqual(messages.map((message) => message.role), ["user", "assistant", "tool", "tool"]);
   assert.equal(messages[1]?.blocks[0]?.type, "text");
-  assert.match(messages[3]?.blocks[0]?.type === "text" ? messages[3].blocks[0].text : "", /Subagent trace/);
+  assert.equal(messages[3]?.blocks[0]?.type, "subagent_trace");
+  assert.match(messages[3]?.blocks[1]?.type === "text" ? messages[3].blocks[1].text : "", /Subagent trace/);
 });
 
 test("messagesFromTurns strips IDE context wrapper from Codex user messages", () => {

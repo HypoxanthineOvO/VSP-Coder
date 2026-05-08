@@ -16,6 +16,8 @@ plan:
 
 execution:
   mode: self
+  worker_separation:
+    mode: recommended
   steps:
     preset: tdd
   test_profiles:

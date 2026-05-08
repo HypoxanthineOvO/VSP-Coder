@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { Message, Metric, Project, Role, Session, SessionStatus } from "@vsp-coder/protocol";
+import type { Message, Metric, Project, Role, Session, SessionStatus, SubagentTrace } from "@vsp-coder/protocol";
 import type { CodexAppServerManager } from "./codex.js";
 import { artifactsFromCodexItem } from "./codexArtifacts.js";
 import { stripIdeContextWrapper } from "./codexText.js";
@@ -147,7 +147,7 @@ export function messageFromCodexItem(sessionId: string, item: unknown, createdAt
   const record = asRecord(item);
   const type = stringValue(record.type);
   const id = itemId(record);
-  if (isSubagentItem(record)) return [textMessage(sessionId, "tool", subagentItemText(record), id, createdAt)];
+  if (isSubagentItem(record)) return [subagentTraceMessage(sessionId, record, id, createdAt)];
   if (type === "userMessage") {
     const text = arrayValue(record.content)
       .map((content) => {
@@ -195,6 +195,41 @@ function subagentItemText(item: Record<string, unknown>) {
     summary ? `summary: ${summary}` : null,
     `raw: ${safeJson(item)}`
   ].filter(Boolean).join("\n");
+}
+
+function subagentTraceMessage(sessionId: string, item: Record<string, unknown>, id: string, createdAt: string): Message {
+  const trace = subagentTraceFromItem(item, id);
+  return {
+    id,
+    sessionId,
+    role: "tool",
+    createdAt,
+    providerItemRef: id,
+    blocks: [
+      { type: "subagent_trace", trace },
+      { type: "text", text: subagentItemText(item) }
+    ]
+  };
+}
+
+function subagentTraceFromItem(item: Record<string, unknown>, id: string): SubagentTrace {
+  const type = stringValue(item.type) || "subagent";
+  const name = stringValue(item.name) || stringValue(item.agentName) || stringValue(item.agentId) || id;
+  return {
+    id,
+    status: stringValue(item.status) || stringValue(item.state) || "completed",
+    agentName: name,
+    agentId: stringValue(item.agentId) || stringValue(item.id) || undefined,
+    agentType: type,
+    method: stringValue(item.method) || undefined,
+    summary: stringValue(item.summary) || stringValue(item.text) || stringValue(item.output) || undefined,
+    raw: item,
+    interaction: {
+      supported: false,
+      reason: "当前 Codex provider 只暴露 Subagent trace 事件，没有暴露可继续对话的 Subagent channel。",
+      actions: [{ id: "open_detail", label: "查看详情", enabled: true }]
+    }
+  };
 }
 
 function itemId(item: Record<string, unknown>) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -14,9 +14,13 @@ import {
   Clock3,
   FileText,
   Image,
+  Maximize2,
   Menu,
+  Minimize2,
   MoreHorizontal,
   Paperclip,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Play,
   RefreshCw,
@@ -30,6 +34,7 @@ import {
 } from "lucide-react";
 import type {
   AppConfig,
+  AppError,
   Artifact,
   AutomationProfileId,
   CodexProviderHealth,
@@ -39,10 +44,12 @@ import type {
   Message,
   ModelOption,
   Project,
+  ProviderKind,
   QaRun,
   RequestCard,
   QueueItem,
   Session,
+  SubagentTrace,
   StructuredToken,
   VspEvent,
   VspState,
@@ -50,6 +57,18 @@ import type {
   WorkflowSnapshot
 } from "@vsp-coder/protocol";
 import { parseCommandOutput, type ParsedCommandOutput } from "./rendering.js";
+import {
+  mergeDetailedSession,
+  mergeStatePreservingDetails,
+  patchSession,
+  sanitizeMessageText,
+  type LiveSessionPatch
+} from "./sessionMerge.js";
+import {
+  readPersistedSelection,
+  resolveSessionSelection,
+  writePersistedSelection
+} from "./sessionSelection.js";
 import "katex/dist/katex.min.css";
 import "./styles.css";
 
@@ -66,6 +85,13 @@ type RightTab = "workflow" | "artifacts" | "skills" | "settings";
 type ActivityScope = "all" | "project" | "session";
 type ResizableColumn = "global" | "session" | "right";
 type ToolDisplayMode = "simple" | "detailed";
+type ModelSwitchState = {
+  sessionId: string;
+  status: "pending" | "success" | "failed";
+  target: { provider: ProviderKind; model: string; reasoning: string };
+  previous: { provider: ProviderKind; model: string; reasoning: string };
+  error?: string;
+};
 
 const columnBounds: Record<ResizableColumn, { min: number; max: number }> = {
   global: { min: 72, max: 300 },
@@ -73,9 +99,13 @@ const columnBounds: Record<ResizableColumn, { min: number; max: number }> = {
   right: { min: 300, max: 620 }
 };
 
+const mobileBreakpoint = 1100;
+const compactRightRailBreakpoint = 1380;
+const collapsedRightRailWidth = 76;
+const minConversationWidth = 520;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const initialLayout = (): Record<ResizableColumn, number> => {
-  if (typeof window !== "undefined" && window.innerWidth <= 1540 && window.innerWidth > 1100) {
+  if (typeof window !== "undefined" && window.innerWidth <= 1540 && window.innerWidth > mobileBreakpoint) {
     if (window.innerWidth <= 1280) return { global: 72, session: 240, right: 330 };
     return { global: 72, session: 260, right: 380 };
   }
@@ -103,50 +133,6 @@ const initialToolDisplayMode = (): ToolDisplayMode => {
   return window.localStorage.getItem("vsp-coder-tool-display-mode") === "detailed" ? "detailed" : "simple";
 };
 
-const IDE_CONTEXT_HEADER = "Context from my IDE setup:";
-const IDE_REQUEST_MARKER = "My request for Codex:";
-
-function stripIdeContextWrapper(text: string) {
-  const normalized = text.trimStart();
-  if (!normalized.startsWith(IDE_CONTEXT_HEADER)) return text;
-  const markerIndex = normalized.indexOf(IDE_REQUEST_MARKER);
-  if (markerIndex === -1) return text;
-  const request = normalized.slice(markerIndex + IDE_REQUEST_MARKER.length).trim();
-  return request || text;
-}
-
-function sanitizeMessageText(message: Message): Message {
-  let changed = false;
-  const blocks = message.blocks.map((block) => {
-    if (block.type !== "text") return block;
-    const text = stripIdeContextWrapper(block.text);
-    if (text === block.text) return block;
-    changed = true;
-    return { ...block, text };
-  });
-  return changed ? { ...message, blocks } : message;
-}
-
-function sanitizeMessages(messages: Message[]) {
-  return messages.map(sanitizeMessageText);
-}
-
-function sanitizeSessionMessages(session: Session): Session {
-  return { ...session, messages: sanitizeMessages(session.messages) };
-}
-
-function sanitizeStateMessages(state: VspState): VspState {
-  return { ...state, sessions: state.sessions.map(sanitizeSessionMessages) };
-}
-
-function sanitizeLivePatch(patch: LiveSessionPatch): LiveSessionPatch {
-  return {
-    ...patch,
-    messageDelta: patch.messageDelta ? { ...patch.messageDelta, text: stripIdeContextWrapper(patch.messageDelta.text) } : undefined,
-    finalMessages: patch.finalMessages ? sanitizeMessages(patch.finalMessages) : undefined
-  };
-}
-
 function insertCompletionText(draft: string, item: CompletionItem) {
   const insert = completionInsertText(item);
   const next = draft.replace(/\S*$/, insert);
@@ -168,14 +154,78 @@ function syncViewportVars() {
   document.documentElement.classList.toggle("keyboard-open", inset > 40);
 }
 
+function shouldCollapseRightRail() {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth <= compactRightRailBreakpoint && window.innerWidth > mobileBreakpoint;
+}
+
 const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const res = await fetch(path, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) }
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    throw apiErrorFromResponse(res.status, path, text);
+  }
   return res.json() as Promise<T>;
 };
+
+class ApiError extends Error {
+  appError: AppError;
+
+  constructor(appError: AppError) {
+    super(appError.message);
+    this.name = "ApiError";
+    this.appError = appError;
+  }
+}
+
+function apiErrorFromResponse(statusCode: number, requestPath: string, body: string) {
+  try {
+    const parsed = JSON.parse(body) as { error?: AppError | string };
+    if (parsed.error && typeof parsed.error === "object" && parsed.error.kind === "app_error") return new ApiError(parsed.error);
+    return new ApiError(localAppError({ statusCode, requestPath, technicalDetail: typeof parsed.error === "string" ? parsed.error : body }));
+  } catch {
+    return new ApiError(localAppError({ statusCode, requestPath, technicalDetail: body }));
+  }
+}
+
+function localAppError(input: { statusCode?: number; requestPath?: string; title?: string; message?: string; technicalDetail?: string; type?: AppError["type"]; retryKind?: AppError["retry"]["kind"]; dedupeKey?: string; target?: AppError["target"] }): AppError {
+  const statusCode = input.statusCode || 0;
+  const type = input.type || (statusCode === 429 ? "rate_limit" : statusCode >= 500 ? "provider" : "http");
+  const retryKind = input.retryKind || (statusCode >= 500 || statusCode === 429 ? "retry_request" : "none");
+  return {
+    kind: "app_error",
+    id: `ui-err-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    title: input.title || (type === "rate_limit" ? "请求过于频繁" : statusCode >= 500 ? "请求失败" : "操作失败"),
+    message: input.message || (type === "rate_limit" ? "请求触发限流，请稍后重试。" : "操作没有成功完成。"),
+    statusCode: statusCode || undefined,
+    technicalDetail: sanitizeClientDetail(input.technicalDetail || ""),
+    retry: {
+      kind: retryKind,
+      label: statusCode === 429 ? "稍后重试" : retryLabel(retryKind),
+      cooldownMs: statusCode === 429 ? 30_000 : undefined
+    },
+    dedupeKey: input.dedupeKey,
+    target: { ...input.target, requestPath: input.requestPath || input.target?.requestPath },
+    createdAt: new Date().toISOString()
+  };
+}
+
+function sanitizeClientDetail(detail: string) {
+  return detail
+    .replace(/(authorization|cookie|set-cookie|x-api-key)\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/gi, "$1: [redacted]")
+    .replace(/(token|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+/gi, "$1: [redacted]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/\/home\/[^\s]+/g, "[path]")
+    .slice(0, 2_000);
+}
+
+function isAppError(value: unknown): value is AppError {
+  return typeof value === "object" && value !== null && (value as AppError).kind === "app_error";
+}
 
 const markdownSanitizeSchema = {
   ...defaultSchema,
@@ -197,198 +247,6 @@ const markdownSanitizeSchema = {
   }
 };
 
-function mergeStatePreservingDetails(previous: VspState | null, next: VspState): VspState {
-  previous = previous ? sanitizeStateMessages(previous) : previous;
-  next = sanitizeStateMessages(next);
-  if (!previous) return next;
-  const previousById = new Map(previous.sessions.map((session) => [session.id, session]));
-  const nextIds = new Set(next.sessions.map((session) => session.id));
-  const localOnly = previous.sessions.filter((session) => !nextIds.has(session.id) && session.provider === "codex");
-  return {
-    ...next,
-    sessions: [...localOnly, ...next.sessions.map((session) => {
-      const existing = previousById.get(session.id);
-      if (!existing) return session;
-      const keepMessages = !session.messages.length && existing.messages.length;
-      const keepCards = !session.cards.length && existing.cards.length;
-      const keepArtifacts = !session.artifacts.length && existing.artifacts.length;
-      if (!keepMessages && !keepCards && !keepArtifacts) return session;
-      return {
-        ...session,
-        model: existing.model || session.model,
-        reasoning: existing.reasoning || session.reasoning,
-        automationProfile: session.automationProfile || existing.automationProfile,
-        sandbox: session.sandbox || existing.sandbox,
-        approvalPolicy: session.approvalPolicy || existing.approvalPolicy,
-        messages: keepMessages ? existing.messages : session.messages,
-        cards: keepCards ? existing.cards : session.cards,
-        artifacts: keepArtifacts ? existing.artifacts : session.artifacts
-      };
-    })]
-  };
-}
-
-type LiveSessionPatch = {
-  kind: "live_session_patch";
-  title?: string;
-  messageDelta?: {
-    id: string;
-    role: "assistant" | "tool";
-    text: string;
-    providerItemRef: string;
-  };
-  finalMessages?: Message[];
-  status?: Session["status"];
-  currentTurnId?: string | null;
-  metric?: Partial<Session["metric"]>;
-  artifactUpdates?: ArtifactUpdate[];
-};
-
-type ArtifactUpdate = Artifact & {
-  appendBody?: boolean;
-};
-
-function patchSession(session: Session, patch: LiveSessionPatch): Session {
-  const cleanPatch = sanitizeLivePatch(patch);
-  const cleanSession = sanitizeSessionMessages(session);
-  return {
-    ...cleanSession,
-    title: cleanPatch.title || cleanSession.title,
-    status: cleanPatch.status || cleanSession.status,
-    currentTurnId: typeof cleanPatch.currentTurnId === "undefined" ? cleanSession.currentTurnId : cleanPatch.currentTurnId || undefined,
-    metric: cleanPatch.metric ? { ...cleanSession.metric, ...cleanPatch.metric, updatedAt: cleanPatch.metric.updatedAt || new Date().toISOString() } : cleanSession.metric,
-    messages: patchMessages(cleanSession.id, cleanSession.messages, cleanPatch),
-    artifacts: cleanPatch.artifactUpdates ? mergeArtifactUpdates(cleanSession.artifacts, cleanPatch.artifactUpdates) : cleanSession.artifacts,
-    updatedAt: new Date().toISOString()
-  };
-}
-
-function mergeArtifactUpdates(existing: Artifact[], updates: ArtifactUpdate[]): Artifact[] {
-  let next = existing;
-  for (const update of updates) {
-    const { appendBody: _appendBody, ...artifact } = update;
-    const current = next.find((item) => item.id === artifact.id);
-    if (!current) {
-      next = [artifact, ...next];
-      continue;
-    }
-    next = next.map((item) => item.id === artifact.id
-      ? { ...item, ...artifact, body: update.appendBody ? `${item.body || ""}${artifact.body || ""}` : artifact.body }
-      : item);
-  }
-  return next;
-}
-
-function patchMessages(sessionId: string, messages: Message[], patch: LiveSessionPatch): Message[] {
-  let next = messages;
-  if (patch.messageDelta) {
-    const delta = patch.messageDelta;
-    next = next.some((message) => message.id === delta.id)
-      ? next.map((message) => message.id === delta.id ? appendMessageText(message, delta.text) : message)
-      : [...next, {
-        id: delta.id,
-        sessionId,
-        role: delta.role,
-        providerItemRef: delta.providerItemRef,
-        createdAt: new Date().toISOString(),
-        blocks: [{ type: "text", text: delta.text }]
-      }];
-  }
-  for (const finalMessage of patch.finalMessages || []) {
-    const duplicate = next.find((message) => messagesAreSameContent(message, finalMessage));
-    if (duplicate && duplicate.id !== finalMessage.id) {
-      next = next.map((message) => message.id === duplicate.id ? mergeMessagePreferLive(message, finalMessage) : message);
-      continue;
-    }
-    next = next.some((message) => message.id === finalMessage.id)
-      ? next.map((message) => message.id === finalMessage.id ? mergeMessagePreferLive(message, finalMessage) : message)
-      : [...next, finalMessage];
-  }
-  return dedupeMessagesByContent(next);
-}
-
-function mergeDetailedSession(existing: Session, detail: Session): Session {
-  existing = sanitizeSessionMessages(existing);
-  detail = sanitizeSessionMessages(detail);
-  return {
-    ...detail,
-    model: existing.model || detail.model,
-    reasoning: existing.reasoning || detail.reasoning,
-    automationProfile: detail.automationProfile || existing.automationProfile,
-    sandbox: detail.sandbox || existing.sandbox,
-    approvalPolicy: detail.approvalPolicy || existing.approvalPolicy,
-    queue: existing.queue.length ? existing.queue : detail.queue,
-    messages: mergeDetailedMessages(existing.messages, detail.messages),
-    artifacts: mergeDetailArtifacts(existing.artifacts, detail.artifacts),
-    cards: existing.cards.some((card) => card.status === "open") ? existing.cards : detail.cards
-  };
-}
-
-function mergeDetailedMessages(existing: Message[], detail: Message[]) {
-  const existingById = new Map(existing.map((message) => [message.id, message]));
-  const detailIds = new Set(detail.map((message) => message.id));
-  const mergedDetail = detail.map((message) => mergeMessagePreferLive(existingById.get(message.id), message));
-  const liveOnly = existing.filter((message) => !detailIds.has(message.id) && !mergedDetail.some((detailMessage) => messagesAreSameContent(message, detailMessage)));
-  return dedupeMessagesByContent([...mergedDetail, ...liveOnly]);
-}
-
-function mergeMessagePreferLive(existing: Message | undefined, detail: Message): Message {
-  existing = existing ? sanitizeMessageText(existing) : existing;
-  detail = sanitizeMessageText(detail);
-  if (!existing) return detail;
-  const existingText = messagePlainText(existing);
-  const detailText = messagePlainText(detail);
-  if (existing.role === detail.role && existingText && detailText && existingText.length > detailText.length) {
-    return {
-      ...detail,
-      blocks: existing.blocks
-    };
-  }
-  return detail;
-}
-
-function messagePlainText(message: Message) {
-  return message.blocks
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("\n");
-}
-
-function messagesAreSameContent(a: Message, b: Message) {
-  return a.role === b.role && normalizedMessageText(a) !== "" && normalizedMessageText(a) === normalizedMessageText(b);
-}
-
-function normalizedMessageText(message: Message) {
-  return messagePlainText(message).replace(/\s+/g, " ").trim();
-}
-
-function dedupeMessagesByContent(messages: Message[]) {
-  const seen = new Set<string>();
-  const next: Message[] = [];
-  for (const message of messages) {
-    const key = `${message.role}:${normalizedMessageText(message)}`;
-    if (normalizedMessageText(message) && seen.has(key)) continue;
-    if (normalizedMessageText(message)) seen.add(key);
-    next.push(message);
-  }
-  return next;
-}
-
-function mergeDetailArtifacts(existing: Artifact[], detail: Artifact[]) {
-  const detailIds = new Set(detail.map((artifact) => artifact.id));
-  return [...detail, ...existing.filter((artifact) => !detailIds.has(artifact.id))];
-}
-
-function appendMessageText(message: Message, delta: string): Message {
-  return {
-    ...message,
-    blocks: message.blocks.map((block, index) => {
-      if (index !== 0 || block.type !== "text") return block;
-      return { ...block, text: `${block.text}${delta}` };
-    })
-  };
-}
-
 function App() {
   const [state, setState] = useState<VspState | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowSnapshot | null>(null);
@@ -403,6 +261,7 @@ function App() {
   const [rightTab, setRightTab] = useState<RightTab>("workflow");
   const [hydratingSessionId, setHydratingSessionId] = useState<string | null>(null);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
+  const [errorCards, setErrorCards] = useState<AppError[]>([]);
   const [creatingSession, setCreatingSession] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -411,6 +270,7 @@ function App() {
   const [activeRunSessionIds, setActiveRunSessionIds] = useState<Set<string>>(() => new Set());
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
+  const [modelSwitch, setModelSwitch] = useState<ModelSwitchState | null>(null);
   const [confirmInterrupt, setConfirmInterrupt] = useState(false);
   const [showAllProjects, setShowAllProjects] = useState(true);
   const [showAllSessions, setShowAllSessions] = useState(true);
@@ -418,8 +278,10 @@ function App() {
   const [toolDisplayMode, setToolDisplayMode] = useState<ToolDisplayMode>(initialToolDisplayMode);
   const [activityScope, setActivityScope] = useState<ActivityScope>("all");
   const [layout, setLayout] = useState<Record<ResizableColumn, number>>(initialLayout);
-  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= 1100);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= mobileBreakpoint);
+  const [rightRailCollapsed, setRightRailCollapsed] = useState(shouldCollapseRightRail);
   const resizeRef = useRef<{ column: ResizableColumn; startX: number; startWidth: number } | null>(null);
+  const rightRailUserToggledRef = useRef(false);
   const messagePaneRef = useRef<HTMLDivElement | null>(null);
   const messagePaneShouldStickRef = useRef(true);
   const messagePaneSessionRef = useRef("");
@@ -429,23 +291,83 @@ function App() {
   const runClearTimersRef = useRef<Map<string, number>>(new Map());
   const activeSessionIdRef = useRef("");
   const activeRunSessionIdsRef = useRef<Set<string>>(new Set());
+  const stateRequestSeqRef = useRef(0);
+  const sessionDetailRequestsRef = useRef<Map<string, { seq: number; controller: AbortController }>>(new Map());
+  const sseDisconnectTimerRef = useRef<number | null>(null);
+
+  const pushError = (error: unknown, context: Partial<AppError> & { retryKind?: AppError["retry"]["kind"]; requestPath?: string } = {}) => {
+    const appError: AppError = isAppError(error)
+      ? error
+      : error instanceof ApiError
+      ? {
+        ...error.appError,
+        ...context,
+        retry: shouldKeepRateLimitRetry(error.appError)
+          ? error.appError.retry
+          : context.retryKind
+          ? { ...error.appError.retry, kind: context.retryKind, label: retryLabel(context.retryKind) }
+          : error.appError.retry,
+        target: { ...error.appError.target, ...context.target, requestPath: context.requestPath || error.appError.target?.requestPath }
+      }
+      : localAppError({
+        type: context.type,
+        title: context.title,
+        message: context.message,
+        requestPath: context.requestPath,
+        technicalDetail: error instanceof Error ? error.message : String(error),
+        retryKind: context.retryKind,
+        dedupeKey: context.dedupeKey,
+        target: context.target
+      });
+    const merged = {
+      ...appError,
+      ...context,
+      retry: shouldKeepRateLimitRetry(appError)
+        ? appError.retry
+        : context.retryKind
+        ? { ...appError.retry, kind: context.retryKind, label: retryLabel(context.retryKind) }
+        : appError.retry,
+      target: { ...appError.target, ...context.target, requestPath: context.requestPath || appError.target?.requestPath },
+      dedupeKey: context.dedupeKey || appError.dedupeKey
+    };
+    setErrorCards((prev) => [merged, ...prev.filter((item) => item.id !== merged.id && (!merged.dedupeKey || item.dedupeKey !== merged.dedupeKey))].slice(0, 4));
+    return merged;
+  };
+
+  const dismissError = (id: string) => setErrorCards((prev) => prev.filter((item) => item.id !== id));
 
   const refresh = async (options: { workflow?: boolean } = { workflow: true }) => {
-    const next = await api<VspState>("/api/state");
-    setState((prev) => mergeStatePreservingDetails(prev, next));
-    if (options.workflow !== false) {
-      const wf = await api<WorkflowSnapshot>(`/api/workflow?projectId=${activeProjectId}`);
-      setWorkflow(wf);
+    const requestSeq = ++stateRequestSeqRef.current;
+    try {
+      const next = await api<VspState>("/api/state");
+      if (requestSeq !== stateRequestSeqRef.current) return;
+      setState((prev) => mergeStatePreservingDetails(prev, next));
+      if (options.workflow !== false) {
+        const wf = await api<WorkflowSnapshot>(`/api/workflow?projectId=${activeProjectId}`);
+        if (requestSeq !== stateRequestSeqRef.current) return;
+        setWorkflow(wf);
+      }
+      void api<CodexProviderHealth>("/api/providers/codex/health").then(setCodexHealth);
+    } catch (error) {
+      const appError = pushError(error, { type: "refresh", title: "刷新失败", retryKind: "refresh_state", requestPath: "/api/state" });
+      setSessionLoadError(appError.message);
     }
-    void api<CodexProviderHealth>("/api/providers/codex/health").then(setCodexHealth);
   };
 
   const loadSessionDetail = async (sessionId: string, options: { silent?: boolean } = {}) => {
     if (!sessionId || sessionId.startsWith("mock-")) return;
     if (!options.silent) setHydratingSessionId(sessionId);
     setSessionLoadError(null);
+    const previous = sessionDetailRequestsRef.current.get(sessionId);
+    previous?.controller.abort();
+    const request = {
+      seq: (previous?.seq || 0) + 1,
+      controller: new AbortController()
+    };
+    sessionDetailRequestsRef.current.set(sessionId, request);
     try {
-      const detail = await api<Session>(`/api/sessions/${sessionId}`);
+      const detail = await api<Session>(`/api/sessions/${sessionId}`, { signal: request.controller.signal });
+      if (sessionDetailRequestsRef.current.get(sessionId)?.seq !== request.seq) return;
       if (["running", "waiting_approval", "queued"].includes(detail.status) || detail.currentTurnId) {
         markSessionRun(sessionId, true);
       } else if (["idle", "interrupted", "error", "done"].includes(detail.status)) {
@@ -456,8 +378,11 @@ function App() {
         sessions: prev.sessions.map((item) => item.id === detail.id ? mergeDetailedSession(item, detail) : item)
       } : prev);
     } catch (error) {
-      setSessionLoadError(error instanceof Error ? error.message : String(error));
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      const appError = pushError(error, { type: "refresh", title: "读取 Session 失败", retryKind: "refresh_state", requestPath: `/api/sessions/${sessionId}`, target: { sessionId } });
+      setSessionLoadError(appError.message);
     } finally {
+      if (sessionDetailRequestsRef.current.get(sessionId)?.seq === request.seq) sessionDetailRequestsRef.current.delete(sessionId);
       if (!options.silent) setHydratingSessionId((current) => current === sessionId ? null : current);
     }
   };
@@ -467,6 +392,13 @@ function App() {
     void api<CompletionItem[]>("/api/completions").then(setCompletions);
     void api<ModelOption[]>("/api/models").then(setModelOptions);
     const source = new EventSource("/api/events");
+    source.onopen = () => {
+      if (sseDisconnectTimerRef.current) {
+        window.clearTimeout(sseDisconnectTimerRef.current);
+        sseDisconnectTimerRef.current = null;
+      }
+      setErrorCards((prev) => prev.filter((item) => item.dedupeKey !== "sse:disconnect"));
+    };
     source.addEventListener("vsp", (event) => {
       try {
         const vspEvent = JSON.parse((event as MessageEvent).data) as VspEvent;
@@ -478,11 +410,31 @@ function App() {
         void refresh({ workflow: false });
       }
     });
-    return () => source.close();
+    source.onerror = () => {
+      if (sseDisconnectTimerRef.current) return;
+      sseDisconnectTimerRef.current = window.setTimeout(() => {
+        sseDisconnectTimerRef.current = null;
+        pushError(localAppError({
+          type: "sse",
+          title: "实时连接已断开",
+          message: "实时事件流持续断开，可以重连或刷新。",
+          retryKind: "reconnect_sse",
+          dedupeKey: "sse:disconnect",
+          target: { operation: "reconnect_sse" }
+        }));
+      }, 1800);
+    };
+    return () => {
+      if (sseDisconnectTimerRef.current) window.clearTimeout(sseDisconnectTimerRef.current);
+      source.close();
+    };
   }, []);
 
   useEffect(() => {
-    const updateViewport = () => setIsMobile(window.innerWidth <= 1100);
+    const updateViewport = () => {
+      setIsMobile(window.innerWidth <= mobileBreakpoint);
+      if (!rightRailUserToggledRef.current) setRightRailCollapsed(shouldCollapseRightRail());
+    };
     updateViewport();
     window.addEventListener("resize", updateViewport);
     return () => window.removeEventListener("resize", updateViewport);
@@ -490,7 +442,7 @@ function App() {
 
   useEffect(() => {
     const fitColumns = () => {
-      if (window.innerWidth <= 1100) return;
+      if (window.innerWidth <= mobileBreakpoint) return;
       setLayout((prev) => fitLayoutToViewport(prev, window.innerWidth));
     };
     fitColumns();
@@ -570,16 +522,29 @@ function App() {
   }, [session?.id, session?.messages.length]);
 
   useEffect(() => {
-    if (!state || !projects.length || selectionBootstrappedRef.current) return;
-    const preferredProjectId = state.defaultProjectId && projects.some((project) => project.id === state.defaultProjectId)
-      ? state.defaultProjectId
-      : projects[0]?.id;
-    if (!preferredProjectId) return;
+    if (!state || !projects.length) return;
+    const resolved = resolveSessionSelection({
+      state,
+      sessions: allSessions,
+      currentProjectId: activeProjectId,
+      currentSessionId: activeSessionId,
+      persisted: selectionBootstrappedRef.current ? null : readPersistedSelection()
+    });
+    if (!resolved.projectId) return;
     selectionBootstrappedRef.current = true;
-    setActiveProjectId(preferredProjectId);
-    const preferredSession = allSessions.find((item) => item.projectId === preferredProjectId);
-    if (preferredSession) setActiveSessionId(preferredSession.id);
-  }, [state, projects, allSessions]);
+    if (resolved.projectId !== activeProjectId) setActiveProjectId(resolved.projectId);
+    if (resolved.sessionId !== activeSessionId) setActiveSessionId(resolved.sessionId);
+    if (resolved.fallbackReason !== "none") setSessionLoadError(selectionFallbackMessage(resolved.fallbackReason));
+  }, [state, projects, allSessions, activeProjectId, activeSessionId]);
+
+  useEffect(() => {
+    if (!selectionBootstrappedRef.current || !activeProjectId) return;
+    writePersistedSelection({
+      projectId: activeProjectId,
+      sessionId: activeSessionId,
+      updatedAt: new Date().toISOString()
+    });
+  }, [activeProjectId, activeSessionId]);
 
   const scopedEvents = useMemo(() => {
     const events = state?.events || [];
@@ -616,6 +581,9 @@ function App() {
   }
 
   function appendEvent(event: VspEvent) {
+    if (event.type === "error") pushError(event.payload && typeof event.payload === "object" && (event.payload as AppError).kind === "app_error"
+      ? new ApiError(event.payload as AppError)
+      : localAppError({ type: "provider", title: "后台错误", message: event.message, technicalDetail: event.message, retryKind: "refresh_state" }));
     setState((prev) => prev ? {
       ...prev,
       events: [event, ...prev.events.filter((item) => item.id !== event.id)].slice(0, 200)
@@ -646,7 +614,8 @@ function App() {
       setSwitcherOpen(false);
       await refresh();
     } catch (error) {
-      setSessionLoadError(error instanceof Error ? error.message : String(error));
+      const appError = pushError(error, { type: "http", title: "创建会话失败", retryKind: "retry_request", requestPath: "/api/sessions" });
+      setSessionLoadError(appError.message);
     } finally {
       setCreatingSession(false);
     }
@@ -658,25 +627,37 @@ function App() {
     void api<ModelOption[]>("/api/models").then(setModelOptions);
   };
 
-  const sendMessage = async () => {
-    if (!session || sendingMessage || (!draft.trim() && !tokens.length)) return;
+  const sendMessage = async (override?: { sessionId: string; text: string; tokens?: StructuredToken[] }) => {
+    const targetSession = override?.sessionId ? state?.sessions.find((item) => item.id === override.sessionId) || session : session;
+    const outgoingText = override?.text ?? draft.trim();
+    const outgoingTokens = override?.tokens ?? tokens;
+    if (!targetSession || sendingMessage || (!outgoingText.trim() && !outgoingTokens.length)) return;
     setSendingMessage(true);
     setSessionLoadError(null);
-    markSessionRun(session.id, true);
+    markSessionRun(targetSession.id, true);
     try {
-      const next = await api<Session>(`/api/sessions/${session.id}`, {
+      const next = await api<Session>(`/api/sessions/${targetSession.id}`, {
         method: "POST",
-        body: JSON.stringify({ text: draft.trim() || "发送结构化 token", tokens })
+        body: JSON.stringify({ text: outgoingText.trim() || "发送结构化 token", tokens: outgoingTokens })
       });
       setState((prev) => prev ? {
         ...prev,
         sessions: prev.sessions.map((item) => item.id === next.id ? next : item)
       } : prev);
-      setDraft("");
-      setTokens([]);
+      if (!override) {
+        setDraft("");
+        setTokens([]);
+      }
     } catch (error) {
-      markSessionRun(session.id, false);
-      setSessionLoadError(error instanceof Error ? error.message : String(error));
+      markSessionRun(targetSession.id, false);
+      const appError = pushError(error, {
+        type: "send",
+        title: "消息发送失败",
+        retryKind: "retry_send",
+        requestPath: `/api/sessions/${targetSession.id}`,
+        target: { sessionId: targetSession.id, operation: "send_message", text: outgoingText, tokens: outgoingTokens }
+      });
+      setSessionLoadError(appError.message);
     } finally {
       setSendingMessage(false);
     }
@@ -712,7 +693,8 @@ function App() {
       setRenameDraft("");
       await loadSessionDetail(next.id);
     } catch (error) {
-      setSessionLoadError(error instanceof Error ? error.message : String(error));
+      const appError = pushError(error, { type: "http", title: "重命名失败", retryKind: "retry_request", requestPath: `/api/sessions/${session.id}/actions`, target: { sessionId: session.id } });
+      setSessionLoadError(appError.message);
     } finally {
       setRenamingSession(false);
     }
@@ -732,6 +714,49 @@ function App() {
     if (type.startsWith("workflow") || type.startsWith("qa_")) await refresh();
   };
 
+  const switchSessionModel = async (provider: string, model: string, reasoning: string) => {
+    if (!session || modelSwitch?.status === "pending") return;
+    const visibleOptions = modelOptionsForSession(session, modelOptions);
+    const option = visibleOptions.find((item) => item.provider === provider && item.model === model);
+    if (!option) {
+      setSessionLoadError("当前 provider 不支持所选模型。");
+      return;
+    }
+    if (!option.reasoning.includes(reasoning)) {
+      setSessionLoadError(`${option.label} 不支持 ${reasoning} reasoning。`);
+      return;
+    }
+    const previous = { provider: session.provider, model: session.model, reasoning: session.reasoning };
+    const target = { provider: option.provider, model: option.model, reasoning };
+    setModelSwitch({ sessionId: session.id, status: "pending", previous, target });
+    setSessionLoadError(null);
+    setState((prev) => prev ? {
+      ...prev,
+      sessions: prev.sessions.map((item) => item.id === session.id ? { ...item, ...target, updatedAt: new Date().toISOString() } : item)
+    } : prev);
+    try {
+      const next = await api<Session>(`/api/sessions/${session.id}/actions`, {
+        method: "POST",
+        body: JSON.stringify({ type: "switch_model", ...target })
+      });
+      setState((prev) => prev ? {
+        ...prev,
+        sessions: prev.sessions.map((item) => item.id === next.id ? mergeDetailedSession(item, next) : item)
+      } : prev);
+      setModelSwitch({ sessionId: session.id, status: "success", previous, target });
+      window.setTimeout(() => setModelSwitch((current) => current?.sessionId === session.id && current.status === "success" ? null : current), 1200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setState((prev) => prev ? {
+        ...prev,
+        sessions: prev.sessions.map((item) => item.id === session.id ? { ...item, ...previous, updatedAt: new Date().toISOString() } : item)
+      } : prev);
+      setModelSwitch({ sessionId: session.id, status: "failed", previous, target, error: message });
+      const appError = pushError(error, { type: "http", title: "模型切换失败", message: `模型切换失败：${message}`, retryKind: "retry_request", requestPath: `/api/sessions/${session.id}/actions`, target: { sessionId: session.id } });
+      setSessionLoadError(appError.message);
+    }
+  };
+
   const updateConfig = async (patch: Partial<Pick<AppConfig, "deploymentMode" | "dataMode" | "automationProfile">>) => {
     await api<AppConfig>("/api/config", {
       method: "PUT",
@@ -746,20 +771,37 @@ function App() {
     void api<ModelOption[]>("/api/models").then(setModelOptions);
   };
 
+  const retryError = async (error: AppError) => {
+    if (error.retry.kind === "none") return;
+    dismissError(error.id);
+    if (error.retry.kind === "retry_send") {
+      if (error.target?.sessionId && error.target.sessionId !== session?.id) setActiveSessionId(error.target.sessionId);
+      if (error.target?.sessionId && typeof error.target.text === "string") {
+        await sendMessage({ sessionId: error.target.sessionId, text: error.target.text, tokens: error.target.tokens || [] });
+      }
+      return;
+    }
+    if (error.retry.kind === "reconnect_sse" || error.retry.kind === "refresh_state" || error.retry.kind === "retry_request") {
+      await refreshState();
+    }
+  };
+
   const chooseCompletion = (item: CompletionItem) => {
     setDraft((prev) => insertCompletionText(prev, item));
   };
 
-  const openPreview = async (token: StructuredToken) => {
+  const openPreview = useCallback(async (token: StructuredToken) => {
     setPreview(await api<Preview>(`/api/preview/${encodeURIComponent(token.id)}`));
     setRightTab("skills");
-  };
+    if (rightRailCollapsed) setRightRailCollapsed(false);
+  }, [rightRailCollapsed]);
 
-  const openArtifactPreview = async (artifact: Artifact) => {
+  const openArtifactPreview = useCallback(async (artifact: Artifact) => {
     if (!session) return;
     setPreview(await api<Preview>(`/api/sessions/${encodeURIComponent(session.id)}/artifacts/${encodeURIComponent(artifact.id)}/preview`));
     setRightTab("artifacts");
-  };
+    if (rightRailCollapsed) setRightRailCollapsed(false);
+  }, [session?.id, rightRailCollapsed]);
 
   const visibleProjects = showAllProjects ? projects : projects.slice(0, 5);
   const sessionPreviewLimit = isMobile ? 3 : 6;
@@ -769,10 +811,11 @@ function App() {
   const layoutStyle = {
     "--global-rail-width": `${layout.global}px`,
     "--session-rail-width": `${layout.session}px`,
-    "--right-rail-width": `${layout.right}px`
+    "--right-rail-width": `${rightRailCollapsed ? collapsedRightRailWidth : layout.right}px`
   } as React.CSSProperties & Record<"--global-rail-width" | "--session-rail-width" | "--right-rail-width", string>;
 
   const startResize = (column: ResizableColumn, event: React.PointerEvent<HTMLButtonElement>) => {
+    if (rightRailCollapsed && column === "right") return;
     resizeRef.current = { column, startX: event.clientX, startWidth: layout[column] };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -782,18 +825,42 @@ function App() {
     if (!active) return;
     const bounds = columnBounds[active.column];
     const delta = active.column === "right" ? active.startX - event.clientX : event.clientX - active.startX;
-    setLayout((prev) => ({ ...prev, [active.column]: clamp(active.startWidth + delta, bounds.min, bounds.max) }));
+    setLayout((prev) => {
+      const proposed = clamp(active.startWidth + delta, bounds.min, bounds.max);
+      const next = { ...prev, [active.column]: proposed };
+      const rightWidth = rightRailCollapsed ? collapsedRightRailWidth : next.right;
+      const mainWidth = window.innerWidth - next.global - next.session - rightWidth;
+      if (mainWidth >= minConversationWidth) return next;
+      const available = Math.max(0, window.innerWidth - minConversationWidth);
+      if (active.column === "right") next.right = clamp(available - next.global - next.session, bounds.min, bounds.max);
+      if (active.column === "session") next.session = clamp(available - next.global - rightWidth, bounds.min, bounds.max);
+      if (active.column === "global") next.global = clamp(available - next.session - rightWidth, bounds.min, bounds.max);
+      return next;
+    });
   };
 
   const endResize = () => {
     resizeRef.current = null;
   };
 
+  const toggleRightRail = () => {
+    rightRailUserToggledRef.current = true;
+    setRightRailCollapsed((value) => !value);
+  };
+
+  const selectRightTab = (tab: RightTab) => {
+    setRightTab(tab);
+    if (rightRailCollapsed) {
+      rightRailUserToggledRef.current = true;
+      setRightRailCollapsed(false);
+    }
+  };
+
   return (
-    <div className="app-shell" style={layoutStyle}>
+    <div className={rightRailCollapsed ? "app-shell right-collapsed" : "app-shell"} style={layoutStyle}>
       <ResizeHandle column="global" label="调整左侧栏宽度" onStart={startResize} onMove={moveResize} onEnd={endResize} />
       <ResizeHandle column="session" label="调整会话栏宽度" onStart={startResize} onMove={moveResize} onEnd={endResize} />
-      <ResizeHandle column="right" label="调整右侧栏宽度" onStart={startResize} onMove={moveResize} onEnd={endResize} />
+      {!rightRailCollapsed && <ResizeHandle column="right" label="调整右侧栏宽度" onStart={startResize} onMove={moveResize} onEnd={endResize} />}
       <aside className="global-rail">
         <div className="brand">
           <strong>VSP-Coder</strong>
@@ -909,7 +976,8 @@ function App() {
             modelOptions={modelOptions}
             displayMode={toolDisplayMode}
             setDisplayMode={setToolDisplayMode}
-            onSwitch={(provider, model, reasoning) => void act("switch_model", { provider, model, reasoning })}
+            modelSwitch={modelSwitch?.sessionId === session.id ? modelSwitch : null}
+            onSwitch={(provider, model, reasoning) => void switchSessionModel(provider, model, reasoning)}
           />
         )}
         {switcherOpen && <button className="scrim" onClick={() => setSwitcherOpen(false)} aria-label="关闭工作台抽屉" />}
@@ -929,8 +997,9 @@ function App() {
               displayMode={toolDisplayMode}
               setDisplayMode={setToolDisplayMode}
               modelOptions={modelOptions}
+              modelSwitch={modelSwitch?.sessionId === session.id ? modelSwitch : null}
               openPreview={openPreview}
-              onSwitchModel={(provider, model, reasoning) => void act("switch_model", { provider, model, reasoning })}
+              onSwitchModel={(provider, model, reasoning) => void switchSessionModel(provider, model, reasoning)}
             />
           ) : <EmptyState />}
         </div>
@@ -948,7 +1017,14 @@ function App() {
           items={pendingQueue}
           onClear={() => void act("clear_queue")}
         />
+        <ErrorDock
+          errors={errorCards}
+          onRetry={(error) => void retryError(error)}
+          onDismiss={dismissError}
+        />
         <Composer
+          sessionId={session?.id || ""}
+          mobileAutoFocus={Boolean(session && !switcherOpen && !renameOpen && !confirmInterrupt)}
           draft={draft}
           setDraft={setDraft}
           tokens={tokens}
@@ -994,22 +1070,30 @@ function App() {
         )}
       </main>
 
-      <aside className="right-rail">
+      <aside className={rightRailCollapsed ? "right-rail collapsed" : "right-rail"}>
         <div className="tabs">
-          <button className={rightTab === "workflow" ? "active" : ""} onClick={() => setRightTab("workflow")}><Workflow size={15} /> Workflow</button>
-          <button className={rightTab === "artifacts" ? "active" : ""} onClick={() => setRightTab("artifacts")}><FileText size={15} /> Artifacts</button>
-          <button className={rightTab === "skills" ? "active" : ""} onClick={() => setRightTab("skills")}><Bot size={15} /> Skill</button>
-          <button className={rightTab === "settings" ? "active" : ""} onClick={() => setRightTab("settings")}><SlidersHorizontal size={15} /> Settings</button>
+          <button
+            className="right-collapse-toggle"
+            title={rightRailCollapsed ? "展开右侧面板" : "收起右侧面板"}
+            aria-label={rightRailCollapsed ? "展开右侧面板" : "收起右侧面板"}
+            onClick={toggleRightRail}
+          >
+            {rightRailCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
+          </button>
+          <button title="Workflow" className={rightTab === "workflow" ? "active" : ""} onClick={() => selectRightTab("workflow")}><Workflow size={15} /> Workflow</button>
+          <button title="Artifacts" className={rightTab === "artifacts" ? "active" : ""} onClick={() => selectRightTab("artifacts")}><FileText size={15} /> Artifacts</button>
+          <button title="Skill" className={rightTab === "skills" ? "active" : ""} onClick={() => selectRightTab("skills")}><Bot size={15} /> Skill</button>
+          <button title="Settings" className={rightTab === "settings" ? "active" : ""} onClick={() => selectRightTab("settings")}><SlidersHorizontal size={15} /> Settings</button>
         </div>
-        {rightTab === "workflow" && (
+        {!rightRailCollapsed && rightTab === "workflow" && (
           <WorkflowPanel
             workflow={workflow}
             onAction={(type, extra) => void act(type, extra)}
           />
         )}
-        {rightTab === "artifacts" && <ArtifactPanel session={session} preview={preview} onPreview={(artifact) => void openArtifactPreview(artifact)} />}
-        {rightTab === "skills" && <SkillPanel preview={preview} completions={completions} onPreview={(item) => void openPreview(item)} />}
-        {rightTab === "settings" && <SettingsPanel config={config} codexHealth={codexHealth} onStartCodex={() => void startCodex()} onUpdate={(patch) => void updateConfig(patch)} />}
+        {!rightRailCollapsed && rightTab === "artifacts" && <ArtifactPanel session={session} preview={preview} onPreview={(artifact) => void openArtifactPreview(artifact)} />}
+        {!rightRailCollapsed && rightTab === "skills" && <SkillPanel preview={preview} completions={completions} onPreview={(item) => void openPreview(item)} />}
+        {!rightRailCollapsed && rightTab === "settings" && <SettingsPanel config={config} codexHealth={codexHealth} onStartCodex={() => void startCodex()} onUpdate={(patch) => void updateConfig(patch)} />}
       </aside>
     </div>
   );
@@ -1139,10 +1223,16 @@ function Conversation(props: {
   displayMode: ToolDisplayMode;
   setDisplayMode: (mode: ToolDisplayMode) => void;
   modelOptions: ModelOption[];
+  modelSwitch: ModelSwitchState | null;
   openPreview: (token: StructuredToken) => void;
   onSwitchModel: (provider: string, model: string, reasoning: string) => void;
 }) {
-  const visibleMessages = visibleConversationMessages(props.session, props.displayMode);
+  const [showAllMessages, setShowAllMessages] = useState(false);
+  const allVisibleMessages = useMemo(() => visibleConversationMessages(props.session, props.displayMode), [props.session, props.displayMode]);
+  useEffect(() => setShowAllMessages(false), [props.session.id, props.displayMode]);
+  const renderLimit = 220;
+  const hiddenCount = Math.max(0, allVisibleMessages.length - renderLimit);
+  const visibleMessages = hiddenCount && !showAllMessages ? allVisibleMessages.slice(-renderLimit) : allVisibleMessages;
   const hasVisibleMessages = visibleMessages.length > 0;
   return (
     <>
@@ -1152,10 +1242,16 @@ function Conversation(props: {
         modelOptions={props.modelOptions}
         displayMode={props.displayMode}
         setDisplayMode={props.setDisplayMode}
+        modelSwitch={props.modelSwitch}
         onSwitchModel={props.onSwitchModel}
       />
       <div className="messages">
         {props.error && props.session.messages.length > 0 && <div className="inline-error">{props.error}</div>}
+        {hiddenCount > 0 && !showAllMessages && (
+          <button className="older-messages-button" onClick={() => setShowAllMessages(true)}>
+            显示更早 {hiddenCount} 条消息
+          </button>
+        )}
         {hasVisibleMessages
           ? visibleMessages.map((message) => <MessageBubble key={message.id} session={props.session} message={message} openPreview={props.openPreview} />)
           : <div className="empty-state compact">
@@ -1169,9 +1265,17 @@ function Conversation(props: {
 }
 
 function visibleConversationMessages(session: Session, displayMode: ToolDisplayMode) {
-  if (displayMode === "simple") return session.messages.filter((message) => message.role !== "tool");
-  const lastFileChangeToolId = [...session.messages].reverse().find(isFileChangeToolMessage)?.id;
-  return session.messages.filter((message) => !isFileChangeToolMessage(message) || message.id === lastFileChangeToolId);
+  const messages = session.messages.filter((message) => message.deliveryState !== "cancelled");
+  if (displayMode === "simple") return messages.filter((message) => message.role !== "tool" || hasSubagentTrace(message));
+  const lastFileChangeToolId = [...messages].reverse().find(isFileChangeToolMessage)?.id;
+  return messages.filter((message) => !isFileChangeToolMessage(message) || message.id === lastFileChangeToolId);
+}
+
+function hasSubagentTrace(message: Message) {
+  return message.blocks.some((block) =>
+    block.type === "subagent_trace" ||
+    (block.type === "text" && isSubagentTraceText(block.text))
+  );
 }
 
 function isFileChangeToolMessage(message: Message) {
@@ -1189,9 +1293,10 @@ function currentToolActivity(session: Session, forceActiveRun = false) {
   const toolText = [...session.messages]
     .reverse()
     .flatMap((message) => message.role === "tool" ? message.blocks : [])
-    .find((block) => block.type === "text");
+    .find((block) => block.type === "subagent_trace" || block.type === "text");
+  if (toolText?.type === "subagent_trace") return { label: subagentTraceSummary(toolText.trace), detail: null };
   if (toolText?.type === "text") {
-    if (isSubagentTraceText(toolText.text)) return { label: subagentTraceSummary(toolText.text), detail: null };
+    if (isSubagentTraceText(toolText.text)) return { label: subagentTraceSummary(parseSubagentTrace(toolText.text)), detail: null };
     const parsed = parseCommandOutput(toolText.text);
     if (parsed) return { label: parsed.summary.replace(/^已运行\s+/, "正在运行 "), detail: parsed };
     if (/^File change:/i.test(toolText.text.trim())) return { label: "正在修改文件", detail: null };
@@ -1232,12 +1337,13 @@ function ToolActivityFloat({ activity }: { activity: { label: string; detail: Pa
   );
 }
 
-function SessionStatusBar({ session, config, modelOptions, displayMode, setDisplayMode, onSwitchModel }: {
+function SessionStatusBar({ session, config, modelOptions, displayMode, setDisplayMode, modelSwitch, onSwitchModel }: {
   session: Session;
   config: AppConfig | null;
   modelOptions: ModelOption[];
   displayMode: ToolDisplayMode;
   setDisplayMode: (mode: ToolDisplayMode) => void;
+  modelSwitch: ModelSwitchState | null;
   onSwitchModel: (provider: string, model: string, reasoning: string) => void;
 }) {
   const current = `${session.provider}:${session.model}`;
@@ -1245,6 +1351,7 @@ function SessionStatusBar({ session, config, modelOptions, displayMode, setDispl
   const option = visibleModelOptions.find((item) => `${item.provider}:${item.model}` === current) || visibleModelOptions[0];
   const reasoningChoices = reasoningChoicesFor(option, session.reasoning);
   const currentValue = option ? `${option.provider}:${option.model}` : current;
+  const switching = modelSwitch?.status === "pending";
   return (
     <div className="session-statusbar">
       <span className={`status-dot ${session.status}`} />
@@ -1252,6 +1359,7 @@ function SessionStatusBar({ session, config, modelOptions, displayMode, setDispl
       <select
         aria-label="切换当前会话模型"
         value={currentValue}
+        disabled={switching}
         onChange={(event) => {
           const [provider, model] = event.target.value.split(":");
           onSwitchModel(provider, model, session.reasoning);
@@ -1262,10 +1370,15 @@ function SessionStatusBar({ session, config, modelOptions, displayMode, setDispl
       <select
         aria-label="切换当前会话 reasoning"
         value={session.reasoning}
-        onChange={(event) => onSwitchModel(session.provider, session.model, event.target.value)}
+        disabled={switching}
+        onChange={(event) => {
+          const [provider, model] = currentValue.split(":");
+          onSwitchModel(provider, model, event.target.value);
+        }}
       >
         {reasoningChoices.map((item) => <option key={item}>{item}</option>)}
       </select>
+      {modelSwitch && <span>{modelSwitchLabel(modelSwitch)}</span>}
       <span>runner {session.runnerOwner}</span>
       <span>{profileLabel(config, session.automationProfile)} · {session.sandbox || config?.profiles.find((item) => item.id === config.automationProfile)?.sandbox || "sandbox"}</span>
       <span>{option?.status === "mock" ? "dev-test" : option?.status || "unknown"}</span>
@@ -1304,11 +1417,12 @@ function ModelControl({ session, modelOptions, onSwitch }: {
   );
 }
 
-function MobileModelDock({ session, modelOptions, displayMode, setDisplayMode, onSwitch }: {
+function MobileModelDock({ session, modelOptions, displayMode, setDisplayMode, modelSwitch, onSwitch }: {
   session: Session;
   modelOptions: ModelOption[];
   displayMode: ToolDisplayMode;
   setDisplayMode: (mode: ToolDisplayMode) => void;
+  modelSwitch: ModelSwitchState | null;
   onSwitch: (provider: string, model: string, reasoning: string) => void;
 }) {
   const current = `${session.provider}:${session.model}`;
@@ -1316,12 +1430,14 @@ function MobileModelDock({ session, modelOptions, displayMode, setDisplayMode, o
   const option = visibleModelOptions.find((item) => `${item.provider}:${item.model}` === current) || visibleModelOptions[0];
   const reasoningChoices = reasoningChoicesFor(option, session.reasoning);
   const currentValue = option ? `${option.provider}:${option.model}` : current;
+  const switching = modelSwitch?.status === "pending";
   return (
     <div className="mobile-model-dock">
       <select
         className="mobile-model-select"
         value={currentValue}
         aria-label="切换当前会话模型"
+        disabled={switching}
         onChange={(event) => {
           const [provider, model] = event.target.value.split(":");
           onSwitch(provider, model, session.reasoning);
@@ -1333,7 +1449,11 @@ function MobileModelDock({ session, modelOptions, displayMode, setDisplayMode, o
         className="mobile-reasoning-select"
         value={session.reasoning}
         aria-label="切换当前会话 reasoning"
-        onChange={(event) => onSwitch(session.provider, session.model, event.target.value)}
+        disabled={switching}
+        onChange={(event) => {
+          const [provider, model] = currentValue.split(":");
+          onSwitch(provider, model, event.target.value);
+        }}
       >
         {reasoningChoices.map((item) => <option key={item}>{item}</option>)}
       </select>
@@ -1417,7 +1537,7 @@ function TerminalGlyph() {
   return <span className="terminal-glyph" aria-hidden="true">$</span>;
 }
 
-function MessageBubble({ session, message, openPreview }: {
+const MessageBubble = React.memo(function MessageBubble({ session, message, openPreview }: {
   session: Session;
   message: Message;
   openPreview: (token: StructuredToken) => void;
@@ -1427,10 +1547,11 @@ function MessageBubble({ session, message, openPreview }: {
     return (
       <div className="tool-inline-row">
         {message.blocks.map((block, index) => {
+          if (block.type === "subagent_trace") return <SubagentTraceNotice key={index} trace={block.trace} />;
           if (block.type !== "text") return null;
           const parsed = parseCommandOutput(block.text);
           if (parsed) return <CommandOutputBlock key={index} parsed={parsed} />;
-          if (isSubagentTraceText(block.text)) return <SubagentTraceNotice key={index} text={block.text} />;
+          if (isSubagentTraceText(block.text)) return <SubagentTraceNotice key={index} trace={parseSubagentTrace(block.text)} rawText={block.text} />;
           if (/^File change:/i.test(block.text.trim())) return <FileChangeNotice key={index} text={fileChangeNoticeText(session, block.text)} />;
           return <FileChangeNotice key={index} text={toolNoticeText(block.text)} />;
         })}
@@ -1438,13 +1559,14 @@ function MessageBubble({ session, message, openPreview }: {
     );
   }
   return (
-    <article className={`bubble ${message.role}`}>
+    <article className={`bubble ${message.role} ${message.deliveryState ? `delivery-${message.deliveryState}` : ""}`}>
       {message.blocks.map((block, index) => {
         if (block.type === "text") {
           const parsed = message.role === "tool" ? parseCommandOutput(block.text) : null;
           if (!parsed && message.role === "tool" && /^File change:/i.test(block.text.trim())) return <FileChangeNotice key={index} text={fileChangeNoticeText(session, block.text)} />;
           return parsed ? <CommandOutputBlock key={index} parsed={parsed} /> : <RichMarkdown key={index} markdown={block.text} />;
         }
+        if (block.type === "subagent_trace") return <SubagentTraceNotice key={index} trace={block.trace} />;
         if (block.type === "tokens") {
           return <div className="token-row" key={index}>{block.tokens.map((token) => <button key={token.id} onClick={() => openPreview(token)}>{token.label}</button>)}</div>;
         }
@@ -1452,11 +1574,11 @@ function MessageBubble({ session, message, openPreview }: {
       })}
     </article>
   );
-}
+});
 
-function SubagentTraceNotice({ text }: { text: string }) {
+function SubagentTraceNotice({ trace, rawText }: { trace: SubagentTrace; rawText?: string }) {
   const [open, setOpen] = useState(false);
-  const summary = subagentTraceSummary(text);
+  const summary = subagentTraceSummary(trace);
   return (
     <>
       <button className="tool-notice subagent-trace" onClick={() => setOpen(true)}>
@@ -1467,7 +1589,7 @@ function SubagentTraceNotice({ text }: { text: string }) {
           <div>
             <Bot size={24} />
             <h3>{summary}</h3>
-            <SubagentTraceDetail text={text} />
+            <SubagentTraceDetail trace={trace} rawText={rawText} />
             <button className="primary" onClick={() => setOpen(false)}>关闭</button>
           </div>
         </div>
@@ -1476,21 +1598,31 @@ function SubagentTraceNotice({ text }: { text: string }) {
   );
 }
 
-function SubagentTraceDetail({ text }: { text: string }) {
-  const fields = parseSubagentTrace(text);
+function SubagentTraceDetail({ trace, rawText }: { trace: SubagentTrace; rawText?: string }) {
   return (
     <div className="subagent-detail">
       <div>
         <span>status</span>
-        <strong>{fields.status || "updated"}</strong>
+        <strong>{trace.status || "updated"}</strong>
       </div>
       <div>
         <span>agent</span>
-        <strong>{fields.agent || fields.type || "subagent"}</strong>
+        <strong>{trace.agentName || trace.agentType || "subagent"}</strong>
       </div>
-      {fields.method && <div><span>method</span><strong>{fields.method}</strong></div>}
-      {fields.summary && <p>{fields.summary}</p>}
-      <pre>{text}</pre>
+      {trace.agentType && <div><span>type</span><strong>{trace.agentType}</strong></div>}
+      {trace.method && <div><span>method</span><strong>{trace.method}</strong></div>}
+      <div>
+        <span>interaction</span>
+        <strong>{trace.interaction.supported ? "可交互" : "只读 trace"}</strong>
+      </div>
+      <p>{trace.summary || "Provider 未提供摘要。"}</p>
+      <p>{trace.interaction.reason}</p>
+      <div className="subagent-actions">
+        {trace.interaction.actions.map((action) => (
+          <button key={action.id} disabled={!action.enabled}>{action.label}</button>
+        ))}
+      </div>
+      <pre>{rawText || JSON.stringify(trace.raw || trace, null, 2)}</pre>
     </div>
   );
 }
@@ -1499,14 +1631,13 @@ function isSubagentTraceText(text: string) {
   return /^Subagent trace:/i.test(text.trim()) || /\b(spawn_agent|wait_agent|subagent)\b/i.test(text);
 }
 
-function subagentTraceSummary(text: string) {
-  const fields = parseSubagentTrace(text);
-  const status = fields.status || text.trim().match(/^Subagent trace:\s*([^\n]+)/i)?.[1] || "updated";
-  const agent = fields.agent || fields.type || "subagent";
+function subagentTraceSummary(trace: SubagentTrace) {
+  const status = trace.status || "updated";
+  const agent = trace.agentName || trace.agentType || "subagent";
   return `Subagent ${agent} · ${status}`;
 }
 
-function parseSubagentTrace(text: string) {
+function parseSubagentTrace(text: string): SubagentTrace {
   const fields: Record<string, string> = {};
   for (const line of text.split("\n")) {
     const match = line.match(/^([A-Za-z _-]+):\s*(.*)$/);
@@ -1515,7 +1646,27 @@ function parseSubagentTrace(text: string) {
     if (key === "subagent trace") fields.status = match[2].trim();
     else fields[key] = match[2].trim();
   }
-  return fields;
+  return {
+    id: fields.id || fields.item || `legacy-subagent-${stableTextHash(text)}`,
+    status: fields.status || "updated",
+    agentName: fields.agent || fields.name || fields.type || "subagent",
+    agentId: fields.agent_id || undefined,
+    agentType: fields.type || undefined,
+    method: fields.method || undefined,
+    summary: fields.summary || undefined,
+    raw: fields.raw || text,
+    interaction: {
+      supported: false,
+      reason: "这是兼容旧文本格式解析出的 Subagent trace；当前 provider 未暴露可继续交互的 Subagent channel。",
+      actions: [{ id: "open_detail", label: "查看详情", enabled: true }]
+    }
+  };
+}
+
+function stableTextHash(text: string) {
+  let hash = 5381;
+  for (const char of text) hash = ((hash << 5) + hash + char.charCodeAt(0)) >>> 0;
+  return hash.toString(36);
 }
 
 function fileChangeNoticeText(session: Session, text: string) {
@@ -1638,7 +1789,45 @@ function QueueDock({ items, onClear }: { items: QueueItem[]; onClear: () => void
   );
 }
 
+function ErrorDock({ errors, onRetry, onDismiss }: { errors: AppError[]; onRetry: (error: AppError) => void; onDismiss: (id: string) => void }) {
+  const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => {
+    if (!errors.some((error) => error.retry.cooldownMs)) return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [errors]);
+  if (!errors.length) return null;
+  return (
+    <div className="error-dock" aria-label="错误与重试">
+      {errors.slice(0, 3).map((error) => {
+        const remaining = retryCooldownRemaining(error, nowMs);
+        return (
+          <article key={error.id} className={`error-card ${error.type}`}>
+            <div className="error-card-main">
+              <span>{error.statusCode ? `${error.statusCode} · ${errorTypeLabel(error.type)}` : errorTypeLabel(error.type)}</span>
+              <strong>{error.title}</strong>
+              <p>{error.message}</p>
+              {error.technicalDetail && (
+                <details>
+                  <summary>技术详情</summary>
+                  <code>{error.technicalDetail}</code>
+                </details>
+              )}
+            </div>
+            <div className="error-card-actions">
+              {error.retry.kind !== "none" && <button disabled={remaining > 0} onClick={() => onRetry(error)}>{remaining > 0 ? `${error.retry.label} ${remaining}s` : error.retry.label}</button>}
+              <button onClick={() => onDismiss(error.id)}><X size={15} /></button>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 function Composer(props: {
+  sessionId: string;
+  mobileAutoFocus: boolean;
   draft: string;
   setDraft: (value: string) => void;
   tokens: StructuredToken[];
@@ -1651,7 +1840,18 @@ function Composer(props: {
   onAction: (type: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const wasSendingRef = useRef(false);
+
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    const maxHeight = expanded ? 320 : 148;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+  }, [expanded]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -1668,6 +1868,27 @@ function Composer(props: {
       document.removeEventListener("keydown", closeOnEsc);
     };
   }, [menuOpen]);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [props.draft, props.tokens.length, expanded, adjustTextareaHeight]);
+
+  useEffect(() => {
+    if (!props.mobileAutoFocus || !props.sessionId || window.innerWidth > mobileBreakpoint) return;
+    const timer = window.setTimeout(() => {
+      textareaRef.current?.focus({ preventScroll: true });
+      syncViewportVars();
+    }, 90);
+    return () => window.clearTimeout(timer);
+  }, [props.sessionId, props.mobileAutoFocus]);
+
+  useEffect(() => {
+    if (wasSendingRef.current && !props.sending && window.innerWidth <= mobileBreakpoint) {
+      textareaRef.current?.focus({ preventScroll: true });
+      syncViewportVars();
+    }
+    wasSendingRef.current = props.sending;
+  }, [props.sending]);
 
   const runAction = (type: string) => {
     setMenuOpen(false);
@@ -1687,23 +1908,42 @@ function Composer(props: {
           </div>
         )}
       </div>
-      <div className="composer-input">
+      <div className={expanded ? "composer-input expanded" : "composer-input"}>
         <div className="draft-tokens">
           {props.tokens.map((token) => <span key={token.id}>{token.label}<button onClick={() => props.setTokens((prev) => prev.filter((item) => item.id !== token.id))}><X size={12} /></button></span>)}
         </div>
-        <input
+        <textarea
+          ref={textareaRef}
           value={props.draft}
-          onChange={(event) => props.setDraft(event.target.value)}
+          onChange={(event) => {
+            props.setDraft(event.target.value);
+            window.requestAnimationFrame(adjustTextareaHeight);
+          }}
+          onInput={() => window.requestAnimationFrame(adjustTextareaHeight)}
           onFocus={() => {
-            if (window.innerWidth <= 1100) {
+            if (window.innerWidth <= mobileBreakpoint) {
               syncViewportVars();
               window.requestAnimationFrame(syncViewportVars);
               for (const delay of [40, 120, 240]) window.setTimeout(syncViewportVars, delay);
             }
           }}
-          onKeyDown={(event) => { if (event.key === "Enter") void props.sendMessage(); }}
+          onKeyDown={(event) => {
+            if ((event.key === "Enter" && (event.metaKey || event.ctrlKey)) || (event.key === "Enter" && !event.shiftKey)) {
+              event.preventDefault();
+              void props.sendMessage();
+            }
+          }}
           placeholder="给 Codex 发消息..."
+          rows={1}
         />
+        <button
+          className="composer-expand"
+          title={expanded ? "收起输入框" : "展开输入框"}
+          aria-label={expanded ? "收起输入框" : "展开输入框"}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        </button>
         {!!props.completions.length && (
           <div className="autocomplete">
             {props.completions.map((item) => (
@@ -2108,6 +2348,60 @@ function reasoningChoicesFor(option: ModelOption | undefined, current: string) {
   const choices = option?.reasoning.filter(Boolean) || [];
   if (!choices.length) return current ? [current] : [];
   return choices.includes(current) ? choices : [current, ...choices];
+}
+
+function modelSwitchLabel(state: ModelSwitchState) {
+  if (state.status === "pending") return `模型切换中 · ${state.target.reasoning}`;
+  if (state.status === "success") return `已切换 · ${state.target.reasoning}`;
+  return `切换失败 · 可重试`;
+}
+
+function retryLabel(kind: AppError["retry"]["kind"]) {
+  const labels: Record<AppError["retry"]["kind"], string> = {
+    none: "无需重试",
+    retry_request: "重试请求",
+    retry_send: "重试发送",
+    refresh_state: "重新刷新",
+    reconnect_sse: "重新连接",
+    retry_queue: "重试队列"
+  };
+  return labels[kind];
+}
+
+function shouldKeepRateLimitRetry(error: AppError) {
+  return error.statusCode === 429 && typeof error.retry.cooldownMs === "number" && error.retry.cooldownMs > 0;
+}
+
+function errorTypeLabel(type: AppError["type"]) {
+  const labels: Record<AppError["type"], string> = {
+    http: "HTTP",
+    rate_limit: "限流",
+    provider: "Provider",
+    sse: "实时连接",
+    send: "发送",
+    refresh: "刷新",
+    queue: "队列",
+    unknown: "错误"
+  };
+  return labels[type];
+}
+
+function retryCooldownRemaining(error: AppError, nowMs: number) {
+  if (!error.retry.cooldownMs) return 0;
+  const startedAt = new Date(error.createdAt).getTime();
+  if (!Number.isFinite(startedAt)) return 0;
+  return Math.max(0, Math.ceil((startedAt + error.retry.cooldownMs - nowMs) / 1000));
+}
+
+function selectionFallbackMessage(reason: "missing_project" | "missing_session" | "empty_project" | "first_available" | "none") {
+  const labels = {
+    none: "",
+    missing_project: "上次选择的 Project 不可用，已切换到可用工作区。",
+    missing_session: "上次选择的 Session 不可用，已切换到可用会话。",
+    empty_project: "上次选择的 Project 暂无会话。",
+    first_available: "已打开最近可用会话。"
+  };
+  return labels[reason];
 }
 
 function statusLabel(status: string) {

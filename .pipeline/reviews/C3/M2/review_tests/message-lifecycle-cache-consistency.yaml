@@ -1,0 +1,21 @@
+cycle: C3
+milestone: M2
+kind: review_tests
+status: pass
+timestamp: "2026-05-07T22:33:44+08:00"
+commands:
+  - command: npm run typecheck
+    status: pass
+  - command: npm run test
+    status: pass
+    note: 56 node/protocol/server/web checks passed.
+  - command: npm run e2e -- --project=chromium --grep "message|refresh|queue|cache"
+    status: pass
+    note: 4 focused Chromium regression tests passed.
+  - command: npm run build
+    status: pass
+coverage:
+  - server provider refresh preserves live-only messages.
+  - stale frontend state refresh no longer drops newer live messages.
+  - same-role same-text messages with different provider item identities both survive.
+  - busy queue creates paired visible optimistic user messages.

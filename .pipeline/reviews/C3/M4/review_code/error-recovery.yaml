@@ -1,0 +1,23 @@
+cycle: C3
+milestone: M4
+kind: review_code
+status: pass
+timestamp: "2026-05-07T22:54:52+08:00"
+summary: >
+  Reviewed unified AppError propagation from server API responses into the web error dock,
+  including retry policy, target binding, and secret/path redaction.
+checks:
+  - id: protocol-model
+    status: pass
+    note: AppError covers type, status, user copy, technical detail, retry policy, and target identity.
+  - id: server-normalization
+    status: pass
+    note: API catch returns normalized app_error payloads.
+  - id: redaction
+    status: pass
+    note: Authorization, cookies, tokens, secrets, bearer values, and home paths are redacted.
+  - id: frontend-dock
+    status: pass
+    note: API, send, refresh, and SSE failures render in the bottom error dock with retry actions.
+residual_risks:
+  - Queue item retry can be made more granular in a later hardening pass.

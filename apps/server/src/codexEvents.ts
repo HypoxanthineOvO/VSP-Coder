@@ -1,4 +1,4 @@
-import type { Message, Metric, SessionStatus, VspEvent } from "@vsp-coder/protocol";
+import type { Message, Metric, SessionStatus, SubagentTrace, VspEvent } from "@vsp-coder/protocol";
 import { messageFromCodexItem } from "./codexDiscovery.js";
 import { artifactUpdatesFromNotification, artifactsFromCodexItem, type ArtifactUpdate } from "./codexArtifacts.js";
 
@@ -63,7 +63,7 @@ export function mapCodexNotification(notification: CodexNotification, at = new D
   if (isSubagentMethod(method) && threadId) {
     const itemId = stringValue(params.itemId) || stringValue(params.agentId) || `${turnId || threadId}:subagent:${stableHash(JSON.stringify(params))}`;
     return [live(threadId, "session_updated", "Subagent trace 已更新", {
-      messageDelta: { id: itemId, role: "tool", text: subagentTraceText(method, params), providerItemRef: itemId },
+      finalMessages: [subagentTraceMessage(threadId, itemId, method, params, at.toISOString())],
       status: "running",
       currentTurnId: turnId || null
     })];
@@ -217,6 +217,40 @@ function subagentTraceText(method: string, params: Record<string, unknown>) {
     `raw: ${safeJson(params)}`
   ].filter(Boolean);
   return `${lines.join("\n")}\n`;
+}
+
+function subagentTraceMessage(sessionId: string, itemId: string, method: string, params: Record<string, unknown>, createdAt: string): Message {
+  return {
+    id: itemId,
+    sessionId,
+    role: "tool",
+    createdAt,
+    providerItemRef: itemId,
+    blocks: [
+      { type: "subagent_trace", trace: subagentTraceFromParams(itemId, method, params) },
+      { type: "text", text: subagentTraceText(method, params) }
+    ]
+  };
+}
+
+function subagentTraceFromParams(itemId: string, method: string, params: Record<string, unknown>): SubagentTrace {
+  const agentType = stringValue(params.agentType) || stringValue(params.agent_type) || stringValue(params.type) || "subagent";
+  const name = stringValue(params.name) || stringValue(params.agentName) || stringValue(params.agentId) || stringValue(params.id) || agentType;
+  return {
+    id: itemId,
+    status: stringValue(params.status) || stringValue(params.state) || stringValue(params.phase) || "updated",
+    agentName: name,
+    agentId: stringValue(params.agentId) || stringValue(params.id) || undefined,
+    agentType,
+    method,
+    summary: stringValue(params.summary) || stringValue(params.message) || stringValue(params.delta) || stringValue(params.output) || undefined,
+    raw: params,
+    interaction: {
+      supported: false,
+      reason: "当前 Codex provider 只提供 Subagent trace 通知；继续交互需要 provider 暴露 Subagent channel 或 continuation API。",
+      actions: [{ id: "open_detail", label: "查看详情", enabled: true }]
+    }
+  };
 }
 
 function isNonBlockingWarning(message: string) {

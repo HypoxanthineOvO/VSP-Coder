@@ -1,0 +1,21 @@
+verdict: pass
+reviewed_refs:
+  - .pipeline/reports/M0-audit.md
+  - .pipeline/reports/M0-known-bug-root-cause-matrix.md
+  - apps/web/src/main.tsx
+  - apps/web/src/styles.css
+  - apps/server/src/index.ts
+  - apps/server/src/store.ts
+  - apps/server/src/codexDiscovery.ts
+  - apps/server/src/codexEvents.ts
+  - packages/protocol/src/index.ts
+checked_rules:
+  - known_bug_matrix_complete
+  - baseline_commands_recorded
+  - security_review_included
+  - post_m0_plan_gate_recorded
+unchecked_rules:
+  - independent_subagent_review
+issues: []
+retry_round: 0
+fallback_reason: "worker_separation recommended degraded: no explicit user authorization for Codex subagent delegation in this turn, so the main orchestrator performed the audit and recorded the limitation."

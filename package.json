@@ -1,6 +1,6 @@
 {
   "name": "vsp-coder",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "type": "module",
@@ -11,13 +11,16 @@
   "scripts": {
     "dev": "npm run dev -w @vsp-coder/server & npm run dev -w @vsp-coder/web",
     "build": "npm run build -ws",
+    "e2e": "playwright test",
     "test": "npm run test -ws --if-present",
     "typecheck": "npm run typecheck -ws --if-present",
+    "screenshots": "playwright test --grep @screenshot",
     "start": "npm run start -w @vsp-coder/server",
     "qa": "npm run test && npm run build",
     "deploy:local": "node scripts/deploy-local.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^20.19.0",
     "typescript": "^5.9.3"
   }

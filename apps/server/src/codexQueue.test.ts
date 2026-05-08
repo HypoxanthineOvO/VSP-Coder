@@ -53,6 +53,13 @@ test("enqueues outbound messages without marking them sent", () => {
   assert.equal(queued.queue.length, 1);
   assert.equal(queued.queue[0].text, "second");
   assert.equal(queued.queue[0].state, "pending");
+  assert.equal(queued.messages.length, 1);
+  assert.equal(queued.messages[0].role, "user");
+  assert.equal(queued.messages[0].providerItemRef, queued.queue[0].id);
+  assert.equal(queued.messages[0].clientMutationId, queued.queue[0].id);
+  assert.equal(queued.messages[0].deliveryState, "pending");
+  assert.equal(queued.messages[0].blocks[0].type, "text");
+  if (queued.messages[0].blocks[0].type === "text") assert.equal(queued.messages[0].blocks[0].text, "second");
   assert.equal(nextPendingQueueItem(queued)?.id, queued.queue[0].id);
 });
 
@@ -73,12 +80,21 @@ test("clearPendingQueue only clears pending VSP queue items", () => {
   assert.equal(cleared.status, "running");
 });
 
+test("clearPendingQueue removes paired pending optimistic messages", () => {
+  const queued = enqueuePendingMessage(baseSession({ status: "running", currentTurnId: "turn-1" }), "cancel me");
+  const { session: cleared } = clearPendingQueue(queued);
+  assert.equal(cleared.queue[0].state, "cleared");
+  assert.equal(cleared.messages.some((message) => message.clientMutationId === queued.queue[0].id), false);
+});
+
 test("marks queued item as sent before draining to Codex turn/start", () => {
   const queued = enqueuePendingMessage(baseSession(), "next");
   const sent = markQueueItemSent(queued, queued.queue[0].id);
   assert.equal(sent.queue[0].state, "sent");
+  assert.equal(sent.messages[0].deliveryState, "sent");
   const pending = markQueueItemPending(sent, sent.queue[0].id);
   assert.equal(pending.queue[0].state, "pending");
+  assert.equal(pending.messages[0].deliveryState, "pending");
 });
 
 test("app-server loss marks active sessions failed without clearing pending queue", () => {

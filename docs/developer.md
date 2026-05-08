@@ -26,6 +26,18 @@ VSP-Coder 是一个 TypeScript npm workspace。
 
 本地运行时文件位于 `.vsp-coder/`，并已被 git 忽略。
 
+## 消息生命周期
+
+消息合并必须优先使用 provider item id、client mutation id 和 queue item id，而不是纯文本内容。前端在收到 `/api/state`、session detail 或 SSE patch 时，都要保留 live-only 消息和本地 pending outbound，避免旧快照覆盖用户刚发送的消息。
+
+Subagent 不再只是工具文本。协议层提供 `subagent_trace` block，server 在 Codex discovery 和 live event 两条路径都会生成结构化 trace，并附带一份 legacy text block 兼容旧渲染。当前 Codex provider 只暴露 trace，不暴露可直接进入子 agent 的交互 channel，因此 UI 必须显示不可交互原因，而不是假装可以进入。
+
+## 错误模型
+
+后端错误统一归一化为 `AppError`，包含用户说明、技术详情、HTTP status、retry policy、target 和去重 key。非 HTTP provider/runtime 错误也必须经过脱敏后再进入 store、SSE 或 Activity。
+
+前端底部错误卡使用同一模型渲染 502、429、SSE 断开、发送失败和 refresh 失败。SSE 断连错误需要延迟确认并在连接恢复后清除，避免重启、测试故障注入或短暂 reconnect 形成卡片噪音。
+
 ## 部署辅助命令
 
 `npm run deploy:local` 会构建 workspace、寻找可用端口、启动构建后的服务、等待 `/api/health`，然后写入 `.vsp-coder/deployment.json`。
@@ -56,6 +68,8 @@ Vite dev proxy 会读取 `VITE_API_TARGET`，未设置时回退到同一组端�
 ```bash
 npm run typecheck
 npm test
+npm run e2e -- --project=chromium
+npm run screenshots -- --project=chromium
 npm run build
 git diff --check
 ```

@@ -1,5 +1,22 @@
 # 变更日志
 
+## v0.3.0 - 2026-05-08
+
+### 功能与体验
+
+- 修复刷新、轮询和 SSE live patch 交错时吞掉已发送消息的问题，消息合并改为 identity-first。
+- 默认恢复上次选中的项目和会话，并在目标失效时做可解释 fallback。
+- 为模型和 reasoning 切换增加 pending、失败回滚、capability 校验和错误重试入口。
+- 新增底部错误卡与重试卡，覆盖 502、429、SSE 断开、发送失败、refresh 失败和 provider 错误。
+- 优化窄屏桌面和移动端导航，右侧栏可收拢为 rail，移动端 drawer、软键盘跟随和长输入 composer 可用。
+- 统一前端 motion token、按钮色调、交互提示、发送状态、错误卡动画和 reduced-motion 降级。
+- Subagent trace 升级为协议级结构化 block，简单模式保留入口，详情面板展示状态、原始 trace 和 provider 交互能力。
+
+### 验证
+
+- 新增 Chromium Playwright 与截图基线，覆盖消息生命周期、错误卡、响应式布局、移动端 drawer、长输入 composer、reduced-motion 和 Subagent trace。
+- 发布前执行 typecheck、unit tests、Chromium E2E、screenshot smoke、build、diff check、本地部署 smoke、Hypo-Workflow sync/docs 检查。
+
 ## v0.2.1 - 2026-05-07
 
 ### 文档

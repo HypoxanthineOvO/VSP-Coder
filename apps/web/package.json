@@ -1,6 +1,6 @@
 {
   "name": "@vsp-coder/web",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.0",
-    "@vsp-coder/protocol": "0.2.1",
+    "@vsp-coder/protocol": "0.3.0",
     "katex": "^0.16.45",
     "lucide-react": "^0.561.0",
     "react": "^19.2.3",

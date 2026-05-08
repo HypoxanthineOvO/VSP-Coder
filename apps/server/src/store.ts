@@ -18,6 +18,7 @@ import type {
   SendMessageRequest,
   Session,
   SessionActionRequest,
+  SubagentTrace,
   UpdateAppConfigRequest,
   VspEvent,
   VspState,
@@ -29,8 +30,9 @@ import type {
 import { stripIdeContextWrapper } from "./codexText.js";
 
 export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const storeFile = join(projectRoot, ".vsp-coder", "mock-store", "state.json");
-const appConfigFile = join(projectRoot, ".vsp-coder", "config.json");
+const stateRoot = process.env.VSP_CODER_STATE_DIR ? resolve(process.env.VSP_CODER_STATE_DIR) : join(projectRoot, ".vsp-coder");
+const storeFile = join(stateRoot, "mock-store", "state.json");
+const appConfigFile = join(stateRoot, "config.json");
 
 type Subscriber = (event: VspEvent) => void;
 
@@ -489,6 +491,20 @@ export class MockStore {
     if (request.text.includes("开始测试")) {
       this.emitTestScript(session);
     } else {
+      if (/\b(subagent|worker|explorer)\b/i.test(request.text)) {
+        const traceId = id("subagent");
+        session.messages.push({
+          id: traceId,
+          sessionId,
+          role: "tool",
+          createdAt: now(),
+          providerItemRef: traceId,
+          blocks: [
+            { type: "subagent_trace", trace: mockSubagentTrace(traceId, "running", "Gauss", "explorer", "正在审计当前实现。") },
+            { type: "text", text: "Subagent trace: running\nagent: Gauss\ntype: explorer\nsummary: 正在审计当前实现。" }
+          ]
+        });
+      }
       session.messages.push({
         id: id("msg"),
         sessionId,
@@ -527,7 +543,15 @@ export class MockStore {
     }
 
     if (action.type === "clear_queue") {
+      const clearedIds = new Set(session.queue.filter((item) => item.state === "pending").map((item) => item.id));
       session.queue = session.queue.map((item) => item.state === "pending" ? { ...item, state: "cleared" } : item);
+      session.messages = session.messages.filter((message) =>
+        !(message.role === "user" && message.deliveryState === "pending" && (
+          clearedIds.has(message.id) ||
+          (message.providerItemRef ? clearedIds.has(message.providerItemRef) : false) ||
+          (message.clientMutationId ? clearedIds.has(message.clientMutationId) : false)
+        ))
+      );
       message = "已清空待发送队列，当前 runner 未被中断。";
       this.emit({ sessionId, projectId: session.projectId, type: "queue_updated", message });
       emitted = true;
@@ -554,10 +578,15 @@ export class MockStore {
     if (action.type === "switch_model" || action.type === "switch_model_mock") {
       const option = modelOptions(this.config.dataMode).find((item) =>
         item.provider === (action.provider || session.provider) && item.model === (action.model || action.value)
-      ) || modelOptions(this.config.dataMode)[0];
+      );
+      if (!option) throw Object.assign(new Error("Model option not found"), { status: 400 });
+      const reasoning = action.reasoning || session.reasoning || option.reasoning[0];
+      if (!option.reasoning.includes(reasoning)) {
+        throw Object.assign(new Error(`${option.label} does not support reasoning ${reasoning}`), { status: 400 });
+      }
       session.provider = option.provider;
       session.model = option.model;
-      session.reasoning = action.reasoning || option.reasoning[0] || session.reasoning;
+      session.reasoning = reasoning;
       message = `当前会话模型已切换为 ${option.label} · ${session.reasoning}。`;
       this.emit({ sessionId, projectId: session.projectId, type: "session_updated", message, payload: { provider: session.provider, model: session.model, reasoning: session.reasoning } });
       emitted = true;
@@ -859,6 +888,21 @@ export class MockStore {
   }
 }
 
+function mockSubagentTrace(idValue: string, status: SubagentTrace["status"], agentName: string, agentType: string, summary: string): SubagentTrace {
+  return {
+    id: idValue,
+    status,
+    agentName,
+    agentType,
+    summary,
+    interaction: {
+      supported: false,
+      reason: "开发测试模式只模拟 Subagent trace；当前 provider 未暴露可继续交互的 Subagent channel。",
+      actions: [{ id: "open_detail", label: "查看详情", enabled: true }]
+    }
+  };
+}
+
 export function safeJoin(root: string, relativePath: string) {
   if (!relativePath || relativePath.startsWith("/") || relativePath.includes("\0")) {
     throw Object.assign(new Error("Invalid project-relative path"), { status: 400 });
@@ -1070,6 +1114,8 @@ function isNoisyCoalescableEvent(event: Omit<VspEvent, "id" | "createdAt">) {
   return event.type === "warning" ||
     event.type === "metric_updated" ||
     event.type === "rate_limit_updated" ||
+    (event.type === "session_updated" && event.message === "状态已刷新。") ||
+    (event.type === "session_updated" && /^Codex session 已刷新/.test(event.message)) ||
     (event.type === "session_updated" && /^Codex app-server /.test(event.message));
 }
 

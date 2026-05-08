@@ -66,8 +66,25 @@ export type StructuredToken = {
   risk?: "safe" | "confirm" | "danger";
 };
 
+export type SubagentTrace = {
+  id: string;
+  status: "requested" | "running" | "completed" | "failed" | "not_observed" | "updated" | string;
+  agentName: string;
+  agentId?: string;
+  agentType?: string;
+  method?: string;
+  summary?: string;
+  raw?: unknown;
+  interaction: {
+    supported: boolean;
+    reason: string;
+    actions: Array<{ id: string; label: string; enabled: boolean }>;
+  };
+};
+
 export type MessageBlock =
   | { type: "text"; text: string }
+  | { type: "subagent_trace"; trace: SubagentTrace }
   | { type: "tokens"; tokens: StructuredToken[] }
   | { type: "attachment"; name: string; mime: string; status: "mocked" | "ready" };
 
@@ -78,6 +95,8 @@ export type Message = {
   blocks: MessageBlock[];
   createdAt: string;
   providerItemRef?: string;
+  clientMutationId?: string;
+  deliveryState?: "pending" | "sent" | "confirmed" | "cancelled" | "failed";
 };
 
 export type QueueItem = {
@@ -153,6 +172,45 @@ export type VspEvent = {
   message: string;
   createdAt: string;
   payload?: unknown;
+};
+
+export type AppErrorType =
+  | "http"
+  | "rate_limit"
+  | "provider"
+  | "sse"
+  | "send"
+  | "refresh"
+  | "queue"
+  | "unknown";
+
+export type AppErrorRetryKind = "none" | "retry_request" | "retry_send" | "refresh_state" | "reconnect_sse" | "retry_queue";
+
+export type AppError = {
+  kind: "app_error";
+  id: string;
+  type: AppErrorType;
+  title: string;
+  message: string;
+  statusCode?: number;
+  technicalDetail?: string;
+  retry: {
+    kind: AppErrorRetryKind;
+    label: string;
+    cooldownMs?: number;
+  };
+  dedupeKey?: string;
+  target?: {
+    sessionId?: string;
+    projectId?: string;
+    messageId?: string;
+    queueItemId?: string;
+    requestPath?: string;
+    operation?: "send_message" | "switch_model" | "rename_session" | "create_session" | "refresh_state" | "reconnect_sse";
+    text?: string;
+    tokens?: StructuredToken[];
+  };
+  createdAt: string;
 };
 
 export type Session = {

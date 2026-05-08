@@ -1,0 +1,24 @@
+cycle: C3
+milestone: M3
+kind: review_code
+status: pass
+timestamp: "2026-05-07T22:45:46+08:00"
+summary: >
+  Reviewed session selection persistence and reasoning/model switch state handling.
+  Selection is now resolved deterministically from current state plus persisted choice,
+  and model switches validate provider capabilities before optimistic updates.
+checks:
+  - id: persisted-selection
+    status: pass
+    note: localStorage selection is read on bootstrap and written after active selection changes.
+  - id: fallback-explainability
+    status: pass
+    note: missing project/session fallback paths produce user-visible explanations.
+  - id: reasoning-state-machine
+    status: pass
+    note: switch flow has pending, success, failed, rollback, and duplicate-submit guard.
+  - id: backend-capability-validation
+    status: pass
+    note: unsupported provider/model/reasoning combinations reject without mutating session state.
+residual_risks:
+  - Inline error is the temporary M4-compatible entry; bottom retry card is deferred to M4.

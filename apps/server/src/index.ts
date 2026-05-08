@@ -7,6 +7,7 @@ import { mergeArtifactUpdates } from "./codexArtifacts.js";
 import { mapCodexNotification, type LiveSessionPatch } from "./codexEvents.js";
 import { discoverCodexState, mapThreadToVspSession, readCodexSession } from "./codexDiscovery.js";
 import {
+  appendOptimisticUserMessage,
   clearPendingQueue,
   codexSessionIsBusy,
   enqueuePendingMessage,
@@ -30,10 +31,11 @@ import { previewArtifact } from "./preview.js";
 import { setCodexThreadName } from "./codexRename.js";
 import { mergeProviderRefresh } from "./codexSessionMerge.js";
 import { fallbackCodexModelOptions, listCodexModelOptions } from "./codexModels.js";
+import { appErrorFromUnknown } from "./errors.js";
 import { profileForCwd, selfProtectionOverrides } from "./selfProtection.js";
 import { createTmpQaFixture } from "./tmpQa.js";
 import type { CodexDiscoverySnapshot } from "./codexDiscovery.js";
-import type { AutomationProfile, CodexProviderHealth, ModelOption, Project, RequestCard, Session, SessionActionRequest, VspState } from "@vsp-coder/protocol";
+import type { AppError, AutomationProfile, CodexProviderHealth, Message, ModelOption, Project, RequestCard, Session, SessionActionRequest, SubagentTrace, VspEvent, VspState } from "@vsp-coder/protocol";
 
 const defaultPort = 4180;
 const host = process.env.HOST || process.env.VSP_CODER_HOST || "0.0.0.0";
@@ -58,28 +60,28 @@ const modelCacheTtlMs = 60_000;
 const subagentExpectations = new Map<string, { itemId: string; requestedAt: number; text: string; observed: boolean }>();
 
 codex.on("health", (health) => {
-  store.recordEvent({
+  recordEvent({
     type: health.status === "ready" ? "session_updated" : "error",
     message: `Codex app-server ${health.status}`,
     payload: health
   });
   void handleCodexHealth(health).catch((error) => {
-    store.recordEvent({ type: "error", message: `Codex recovery failed: ${error instanceof Error ? error.message : String(error)}` });
+    recordEvent({ type: "error", message: `Codex recovery failed: ${error instanceof Error ? error.message : String(error)}` });
   });
 });
 codex.on("stderr", (message) => {
   if (isNonBlockingCodexStderr(message)) return;
-  store.recordEvent({ type: message.includes("WARN") ? "warning" : "error", message: `Codex app-server: ${message}` });
+  recordEvent({ type: message.includes("WARN") ? "warning" : "error", message: `Codex app-server: ${message}` });
 });
 codex.on("protocol-error", (error) => {
-  store.recordEvent({ type: "error", message: `Codex protocol error: ${error instanceof Error ? error.message : String(error)}` });
+  recordEvent({ type: "error", message: `Codex protocol error: ${error instanceof Error ? error.message : String(error)}` });
 });
 codex.on("notification", (notification) => {
   handleCodexNotification(notification as { method: string; params?: unknown });
 });
 codex.on("request", (request) => {
   void handleCodexRequest(request as CodexServerRequest).catch((error) => {
-    store.recordEvent({ type: "error", message: `Codex request handling failed: ${error instanceof Error ? error.message : String(error)}` });
+    recordEvent({ type: "error", message: `Codex request handling failed: ${error instanceof Error ? error.message : String(error)}` });
   });
 });
 
@@ -88,9 +90,41 @@ const server = createServer(async (req, res) => {
     await route(req, res);
   } catch (error) {
     const status = typeof error === "object" && error && "status" in error ? Number((error as { status: number }).status) : 500;
-    json(res, status, { error: error instanceof Error ? error.message : String(error) });
+    json(res, status, { error: appErrorFromUnknown(error, { statusCode: status, requestPath: req.url || "/" }) });
   }
 });
+
+type EventInput = Omit<VspEvent, "id" | "createdAt">;
+
+function recordEvent(event: EventInput) {
+  return store.recordEvent(safeErrorEvent(event));
+}
+
+function publishTransientEvent(event: EventInput) {
+  return store.publishTransientEvent(safeErrorEvent(event));
+}
+
+function safeErrorEvent(event: EventInput): EventInput {
+  if (event.type !== "error") return event;
+  const existing = isAppError(event.payload) ? event.payload : null;
+  const appError = existing || appErrorFromUnknown(new Error(event.message), {
+    type: "provider",
+    title: "后台错误",
+    message: "后台错误已记录，可展开错误卡查看脱敏详情。",
+    sessionId: event.sessionId,
+    projectId: event.projectId,
+    dedupeKey: `event:${event.sessionId || event.projectId || "global"}:${event.message.slice(0, 80)}`
+  });
+  return {
+    ...event,
+    message: appError.title,
+    payload: appError
+  };
+}
+
+function isAppError(value: unknown): value is AppError {
+  return typeof value === "object" && value !== null && (value as AppError).kind === "app_error";
+}
 
 async function route(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -156,7 +190,7 @@ async function stateSnapshot() {
       sessions: discovered.sessions
     }, discovered.projects);
   } catch (error) {
-    store.recordEvent({
+    recordEvent({
       type: "error",
       message: `Codex discovery failed: ${error instanceof Error ? error.message : String(error)}`
     });
@@ -240,7 +274,7 @@ async function sendSessionMessage(sessionId: string, request: { text?: string })
   return startCodexTurn(sessionId, text);
 }
 
-async function startCodexTurn(sessionId: string, text: string) {
+async function startCodexTurn(sessionId: string, text: string, outboundRef?: string) {
   const configuredProfile = activeProfile(store.getConfig().automationProfile);
   const cachedBase = sessionCache.get(sessionId)?.session || discoveryCache.snapshot?.sessions.find((item) => item.id === sessionId);
   const profile = profileForCwd(configuredProfile, cachedBase?.cwd, projectRoot);
@@ -262,7 +296,7 @@ async function startCodexTurn(sessionId: string, text: string) {
     }
     throw error;
   }
-  const optimistic = markCodexTurnRunning(cachedSession, response?.turnId || response?.turn?.id);
+  const optimistic = markCodexTurnRunning(cachedSession, response?.turnId || response?.turn?.id, text, outboundRef);
   sessionCache.set(sessionId, { session: optimistic, fetchedAt: Date.now() });
   maybeAddSubagentExpectation(sessionId, text);
   store.recordEvent({ sessionId, type: "message_added", message: "消息已发送到 Codex turn/start" });
@@ -276,13 +310,14 @@ async function startCodexTurn(sessionId: string, text: string) {
   return optimistic;
 }
 
-function markCodexTurnRunning(session: Session, turnId: string | undefined): Session {
-  return {
+function markCodexTurnRunning(session: Session, turnId: string | undefined, text: string, outboundRef?: string): Session {
+  const running: Session = {
     ...session,
     status: "running",
     currentTurnId: turnId || session.currentTurnId,
     updatedAt: new Date().toISOString()
   };
+  return appendOptimisticUserMessage(running, text, outboundRef || `outbound-${turnId || Date.now().toString(36)}`, running.updatedAt);
 }
 
 function enqueueCodexMessage(sessionId: string, text: string, base: Session) {
@@ -360,15 +395,22 @@ async function applySessionAction(sessionId: string, request: SessionActionReque
   const base = sessionCache.get(sessionId)?.session || discoveryCache.snapshot?.sessions.find((item) => item.id === sessionId);
   if (!base) throw Object.assign(new Error("Session not found"), { status: 404 });
   const options = await modelOptionsForCurrentMode();
+  const requestedProvider = request.provider || base.provider;
+  const requestedModel = request.model || request.value || base.model;
   const option = options.find((item) =>
-    item.provider === (request.provider || base.provider) && item.model === (request.model || request.value)
-  ) || options.find((item) => item.provider === base.provider);
+    item.provider === requestedProvider && item.model === requestedModel
+  );
   if (!option) throw Object.assign(new Error("Model option not found"), { status: 400 });
+  if (option.status === "unavailable") throw Object.assign(new Error(`${option.label} is unavailable`), { status: 400 });
+  const reasoning = request.reasoning || base.reasoning || option.reasoning[0];
+  if (!option.reasoning.includes(reasoning)) {
+    throw Object.assign(new Error(`${option.label} does not support reasoning ${reasoning}`), { status: 400 });
+  }
   const next = {
     ...base,
     provider: option.provider,
     model: option.model,
-    reasoning: option.reasoning.includes(request.reasoning || "") ? request.reasoning || option.reasoning[0] : option.reasoning[0],
+    reasoning,
     updatedAt: new Date().toISOString()
   };
   sessionCache.set(sessionId, { session: next, fetchedAt: Date.now() });
@@ -483,7 +525,7 @@ async function applyCodexCardAction(sessionId: string, request: SessionActionReq
     return session || readCodexSessionCached(sessionId);
   } catch (error) {
     const session = updateCachedCard(sessionId, cardId, "failed");
-    store.recordEvent({
+    recordEvent({
       sessionId,
       projectId: session?.projectId,
       type: "error",
@@ -527,7 +569,7 @@ async function readCodexSessionCached(sessionId: string) {
   if (cached && now - cached.fetchedAt < sessionFreshTtlMs) return cached.session;
   if (cached && now - cached.fetchedAt < sessionStaleTtlMs) {
     void refreshCodexSession(sessionId).catch((error) => {
-      store.recordEvent({
+      recordEvent({
         sessionId,
         type: "error",
         message: `Codex session refresh failed: ${error instanceof Error ? error.message : String(error)}`
@@ -546,13 +588,6 @@ async function refreshCodexSession(sessionId: string) {
       const previous = sessionCache.get(sessionId)?.session;
       const merged = previous ? mergeProviderRefresh(previous, session) : session;
       sessionCache.set(sessionId, { session: merged, fetchedAt: Date.now() });
-      store.recordEvent({
-        sessionId,
-        projectId: merged.projectId,
-        type: "session_updated",
-        message: `Codex session 已刷新：${merged.title}`,
-        payload: { messages: merged.messages.length }
-      });
       return merged;
     })
     .finally(() => {
@@ -635,12 +670,12 @@ function handleCodexNotification(notification: { method: string; params?: unknow
   for (const mapped of mapCodexNotification(notification)) {
     if (mapped.sessionId && isSubagentTracePatch(mapped.patch)) markSubagentObserved(mapped.sessionId);
     if (mapped.sessionId && mapped.patch) applyLivePatch(mapped.sessionId, mapped.patch);
-    if (mapped.persistent) store.recordEvent(mapped.event);
-    else store.publishTransientEvent(mapped.event);
+    if (mapped.persistent) recordEvent(mapped.event);
+    else publishTransientEvent(mapped.event);
     if (mapped.sessionId && notification.method === "turn/completed") completedThreadIds.add(mapped.sessionId);
     if (mapped.sessionId && mapped.refreshSession) {
       void refreshCodexSession(mapped.sessionId).catch((error) => {
-        store.recordEvent({
+        recordEvent({
           sessionId: mapped.sessionId,
           type: "error",
           message: `Codex live refresh failed: ${error instanceof Error ? error.message : String(error)}`
@@ -660,17 +695,7 @@ function maybeAddSubagentExpectation(sessionId: string, text: string) {
   subagentExpectations.set(sessionId, { itemId, requestedAt: Date.now(), text, observed: false });
   applyLivePatch(sessionId, {
     kind: "live_session_patch",
-    messageDelta: {
-      id: itemId,
-      role: "tool",
-      text: [
-        "Subagent trace: requested",
-        "agent: provider",
-        "summary: User requested subagent/worker usage; waiting for Codex provider trace.",
-        `raw: ${JSON.stringify({ requestedText: text })}`
-      ].join("\n"),
-      providerItemRef: itemId
-    }
+    finalMessages: [subagentTraceMessage(sessionId, itemId, "requested", "provider", "provider", "User requested subagent/worker usage; waiting for Codex provider trace.", { requestedText: text }, new Date().toISOString())]
   });
 }
 
@@ -684,22 +709,7 @@ function completeSubagentExpectation(sessionId: string) {
   if (!expectation || expectation.observed) return;
   applyLivePatch(sessionId, {
     kind: "live_session_patch",
-    finalMessages: [{
-      id: expectation.itemId,
-      sessionId,
-      role: "tool",
-      providerItemRef: expectation.itemId,
-      createdAt: new Date(expectation.requestedAt).toISOString(),
-      blocks: [{
-        type: "text",
-        text: [
-          "Subagent trace: not observed",
-          "agent: provider",
-          "summary: The user requested subagent/worker usage, but Codex did not emit a subagent trace for this turn.",
-          `raw: ${JSON.stringify({ requestedText: expectation.text })}`
-        ].join("\n")
-      }]
-    }]
+    finalMessages: [subagentTraceMessage(sessionId, expectation.itemId, "not_observed", "provider", "provider", "The user requested subagent/worker usage, but Codex did not emit a subagent trace for this turn.", { requestedText: expectation.text }, new Date(expectation.requestedAt).toISOString())]
   });
   subagentExpectations.delete(sessionId);
 }
@@ -707,9 +717,45 @@ function completeSubagentExpectation(sessionId: string) {
 function isSubagentTracePatch(patch: LiveSessionPatch | undefined) {
   const text = [
     patch?.messageDelta?.text || "",
-    ...(patch?.finalMessages || []).flatMap((message) => message.blocks).map((block) => block.type === "text" ? block.text : "")
+    ...(patch?.finalMessages || []).flatMap((message) => message.blocks).map((block) => block.type === "text" ? block.text : block.type === "subagent_trace" ? `Subagent trace: ${block.trace.status}` : "")
   ].join("\n");
   return /^Subagent trace:/i.test(text.trim());
+}
+
+function subagentTraceMessage(
+  sessionId: string,
+  itemId: string,
+  status: SubagentTrace["status"],
+  agentName: string,
+  agentType: string,
+  summary: string,
+  raw: unknown,
+  createdAt: string
+): Message {
+  const trace: SubagentTrace = {
+    id: itemId,
+    status,
+    agentName,
+    agentType,
+    summary,
+    raw,
+    interaction: {
+      supported: false,
+      reason: "当前 Codex provider 未暴露可继续交互的 Subagent channel；这里只能查看 trace 和原始事件。",
+      actions: [{ id: "open_detail", label: "查看详情", enabled: true }]
+    }
+  };
+  return {
+    id: itemId,
+    sessionId,
+    role: "tool",
+    providerItemRef: itemId,
+    createdAt,
+    blocks: [
+      { type: "subagent_trace", trace },
+      { type: "text", text: `Subagent trace: ${status}\nagent: ${agentName}\ntype: ${agentType}\nsummary: ${summary}\nraw: ${JSON.stringify(raw)}` }
+    ]
+  };
 }
 
 function isNonBlockingCodexStderr(message: string) {
@@ -736,7 +782,7 @@ async function handleCodexHealth(health: CodexProviderHealth) {
     if (cached.session.provider !== "codex" || !codexSessionIsBusy(cached.session)) continue;
     const next = markActiveSessionUnavailable(cached.session);
     sessionCache.set(sessionId, { session: next, fetchedAt: Date.now() });
-    store.recordEvent({
+    recordEvent({
       sessionId,
       projectId: next.projectId,
       type: "error",
@@ -762,12 +808,12 @@ async function drainCodexQueue(sessionId: string) {
     payload: { queueItemId: queueItem.id }
   });
   try {
-    await startCodexTurn(sessionId, queueItem.text);
+    await startCodexTurn(sessionId, queueItem.text, queueItem.id);
     await refreshCodexSession(sessionId).catch(() => undefined);
   } catch (error) {
     const latest = sessionCache.get(sessionId)?.session || sent;
     sessionCache.set(sessionId, { session: markQueueItemPending(latest, queueItem.id), fetchedAt: Date.now() });
-    store.recordEvent({
+    recordEvent({
       sessionId,
       projectId: sent.projectId,
       type: "error",
@@ -831,7 +877,7 @@ async function reconcileFullAutoPendingRequests() {
         payload: { method: request.method, status: resolution.status, automatic: true }
       });
     } catch (error) {
-      store.recordEvent({
+      recordEvent({
         sessionId: request.sessionId,
         type: "error",
         message: `全自动处理 Codex 请求失败：${error instanceof Error ? error.message : String(error)}`,
@@ -886,31 +932,39 @@ function updateCachedCard(sessionId: string, cardId: string, status: RequestCard
 function mergeLiveMessages(sessionId: string, messages: Session["messages"], patch: LiveSessionPatch) {
   let next = messages;
   if (patch.messageDelta) {
-    const existing = next.find((message) => message.id === patch.messageDelta?.id);
+    const delta = patch.messageDelta;
+    const existing = next.find((message) => messageMatches(message, {
+      id: delta.id,
+      providerItemRef: delta.providerItemRef
+    }));
     if (existing) {
-      next = next.map((message) => message.id === patch.messageDelta?.id ? appendText(message, patch.messageDelta.text) : message);
+      next = next.map((message) => messageMatches(message, {
+        id: delta.id,
+        providerItemRef: delta.providerItemRef
+      }) ? appendText(message, delta.text) : message);
     } else {
       next = [...next, {
-        id: patch.messageDelta.id,
+        id: delta.id,
         sessionId,
-        role: patch.messageDelta.role,
-        providerItemRef: patch.messageDelta.providerItemRef,
+        role: delta.role,
+        providerItemRef: delta.providerItemRef,
         createdAt: new Date().toISOString(),
-        blocks: [{ type: "text", text: patch.messageDelta.text }]
+        blocks: [{ type: "text", text: delta.text }]
       }];
     }
   }
   for (const finalMessage of patch.finalMessages || []) {
-    const duplicate = next.find((message) => messagesAreSameContent(message, finalMessage));
-    if (duplicate && duplicate.id !== finalMessage.id) {
-      next = next.map((message) => message.id === duplicate.id ? finalMessage : message);
-      continue;
+    const directMatch = next.find((message) => messageMatches(message, finalMessage));
+    const optimisticMatch = directMatch ? null : next.find((message) => shouldConfirmOptimistic(message, finalMessage));
+    if (directMatch) {
+      next = next.map((message) => messageMatches(message, finalMessage) ? preferLongerLiveText(message, finalMessage) : message);
+    } else if (optimisticMatch) {
+      next = next.map((message) => message === optimisticMatch ? confirmOptimistic(message, finalMessage) : message);
+    } else {
+      next = [...next, finalMessage];
     }
-    next = next.some((message) => message.id === finalMessage.id)
-      ? next.map((message) => message.id === finalMessage.id ? finalMessage : message)
-      : [...next, finalMessage];
   }
-  return dedupeMessagesByContent(next);
+  return next;
 }
 
 function appendText(message: Session["messages"][number], delta: string): Session["messages"][number] {
@@ -923,20 +977,31 @@ function appendText(message: Session["messages"][number], delta: string): Sessio
   };
 }
 
-function messagesAreSameContent(a: Session["messages"][number], b: Session["messages"][number]) {
-  return a.role === b.role && normalizedMessageText(a) !== "" && normalizedMessageText(a) === normalizedMessageText(b);
+function messageMatches(a: Pick<Session["messages"][number], "id" | "providerItemRef">, b: Pick<Session["messages"][number], "id" | "providerItemRef">) {
+  return a.id === b.id || Boolean(a.providerItemRef && b.providerItemRef && a.providerItemRef === b.providerItemRef);
 }
 
-function dedupeMessagesByContent(messages: Session["messages"]) {
-  const seen = new Set<string>();
-  return messages.filter((message) => {
-    const text = normalizedMessageText(message);
-    if (!text) return true;
-    const key = `${message.role}:${text}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function preferLongerLiveText(existing: Session["messages"][number], finalMessage: Session["messages"][number]) {
+  const existingText = normalizedMessageText(existing);
+  const finalText = normalizedMessageText(finalMessage);
+  if (existing.role === finalMessage.role && existingText && finalText && existingText.length > finalText.length) {
+    return { ...finalMessage, blocks: existing.blocks };
+  }
+  return finalMessage;
+}
+
+function shouldConfirmOptimistic(optimistic: Session["messages"][number], providerMessage: Session["messages"][number]) {
+  if (optimistic.role !== "user" || providerMessage.role !== "user") return false;
+  if (optimistic.deliveryState !== "pending" && optimistic.deliveryState !== "sent") return false;
+  return normalizedMessageText(optimistic) !== "" && normalizedMessageText(optimistic) === normalizedMessageText(providerMessage);
+}
+
+function confirmOptimistic(optimistic: Session["messages"][number], providerMessage: Session["messages"][number]): Session["messages"][number] {
+  return {
+    ...providerMessage,
+    clientMutationId: optimistic.clientMutationId || optimistic.providerItemRef || optimistic.id,
+    deliveryState: "confirmed"
+  };
 }
 
 function normalizedMessageText(message: Session["messages"][number]) {

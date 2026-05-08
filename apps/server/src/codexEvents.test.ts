@@ -131,7 +131,9 @@ test("maps subagent-like notifications into trace tool messages", () => {
   });
   assert.equal(mapped.sessionId, "thread-1");
   assert.equal(mapped.event.type, "session_updated");
-  assert.equal(mapped.patch?.messageDelta?.role, "tool");
-  assert.match(mapped.patch?.messageDelta?.text || "", /Subagent trace: running/);
-  assert.match(mapped.patch?.messageDelta?.text || "", /agent: agent-1/);
+  const message = mapped.patch?.finalMessages?.[0];
+  assert.equal(message?.role, "tool");
+  assert.equal(message?.blocks[0]?.type, "subagent_trace");
+  assert.equal(message?.blocks[0]?.type === "subagent_trace" ? message.blocks[0].trace.agentName : "", "agent-1");
+  assert.match(message?.blocks[1]?.type === "text" ? message.blocks[1].text : "", /Subagent trace: running/);
 });

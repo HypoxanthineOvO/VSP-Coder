@@ -52,3 +52,78 @@ test("mergeProviderRefresh lets current provider profile replace stale session p
   assert.equal(merged.sandbox, "danger-full-access");
   assert.equal(merged.approvalPolicy, "never");
 });
+
+test("mergeProviderRefresh preserves live-only messages during provider refresh", () => {
+  const liveOnly = {
+    id: "live-1",
+    sessionId: "thread-1",
+    role: "assistant" as const,
+    providerItemRef: "live-1",
+    createdAt: "2026-05-05T00:00:01.000Z",
+    blocks: [{ type: "text" as const, text: "streaming response" }]
+  };
+  const merged = mergeProviderRefresh(
+    session({ status: "running", currentTurnId: "turn-1", messages: [liveOnly] }),
+    session({ status: "running", currentTurnId: "turn-1", messages: [] })
+  );
+
+  assert.deepEqual(merged.messages.map((message) => message.id), ["live-1"]);
+});
+
+test("mergeProviderRefresh does not content-dedupe distinct provider messages", () => {
+  const merged = mergeProviderRefresh(
+    session({
+      messages: [{
+        id: "u-1",
+        sessionId: "thread-1",
+        role: "user",
+        providerItemRef: "u-1",
+        createdAt: "2026-05-05T00:00:01.000Z",
+        blocks: [{ type: "text", text: "继续" }]
+      }]
+    }),
+    session({
+      messages: [{
+        id: "u-2",
+        sessionId: "thread-1",
+        role: "user",
+        providerItemRef: "u-2",
+        createdAt: "2026-05-05T00:00:02.000Z",
+        blocks: [{ type: "text", text: "继续" }]
+      }]
+    })
+  );
+
+  assert.deepEqual(merged.messages.map((message) => message.id), ["u-2", "u-1"]);
+});
+
+test("mergeProviderRefresh replaces matching optimistic outbound with provider final message", () => {
+  const merged = mergeProviderRefresh(
+    session({
+      messages: [{
+        id: "queue-1",
+        sessionId: "thread-1",
+        role: "user",
+        providerItemRef: "queue-1",
+        clientMutationId: "queue-1",
+        deliveryState: "sent",
+        createdAt: "2026-05-05T00:00:01.000Z",
+        blocks: [{ type: "text", text: "queued text" }]
+      }]
+    }),
+    session({
+      messages: [{
+        id: "provider-user-1",
+        sessionId: "thread-1",
+        role: "user",
+        providerItemRef: "provider-user-1",
+        createdAt: "2026-05-05T00:00:02.000Z",
+        blocks: [{ type: "text", text: "queued text" }]
+      }]
+    })
+  );
+
+  assert.deepEqual(merged.messages.map((message) => message.id), ["provider-user-1"]);
+  assert.equal(merged.messages[0].clientMutationId, "queue-1");
+  assert.equal(merged.messages[0].deliveryState, "confirmed");
+});

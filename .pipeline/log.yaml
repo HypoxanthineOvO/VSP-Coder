@@ -1,5 +1,206 @@
 entries:
   -
+    id: RELEASE-v0.3.0-C3-20260508T003239+0800
+    type: release
+    ref: v0.3.0
+    status: ready
+    timestamp: "2026-05-08T00:32:39+08:00"
+    summary: Prepared C3 v0.3.0 release with audit closure, Chinese docs, full regression, sync repair/check, local deployment on 4180, and codex-mode smoke validation.
+    report: .pipeline/reports/M8-regression-and-closure.md
+    trigger: user
+  -
+    id: C3-M8-COMPLETE-20260508T003239+0800
+    type: milestone
+    ref: M8
+    status: completed
+    timestamp: "2026-05-08T00:32:39+08:00"
+    summary: Completed M8 with M0/M4.5 closure tables, v0.3.0 docs/changelog/version sync, full Chromium Playwright and screenshot regression, diff check, sync repair/check, and deployment smoke.
+    report: .pipeline/reports/M8-regression-and-closure.md
+    trigger: workflow
+  -
+    id: C3-M7-COMPLETE-20260508T002710+0800
+    type: milestone
+    ref: M7
+    status: completed
+    timestamp: "2026-05-08T00:27:10+08:00"
+    summary: Completed M7 with protocol-level SubagentTrace blocks, server discovery/live trace mapping, simple-mode trace visibility, detail modal, provider interaction limitations, and delayed SSE disconnect cards.
+    report: .pipeline/reports/M7-subagent-trace.md
+    trigger: workflow
+  -
+    id: C3-M5-M6-HYPO-AGENT-NOTIFY-20260508T000129+0800
+    type: notification
+    ref: M5-M6
+    status: completed
+    timestamp: "2026-05-08T00:01:29+08:00"
+    summary: Sent M5/M6 completion message through Hypo Agent CLI after a successful dry run; QQ, Weixin, and Feishu channel sends all succeeded.
+    trigger: user
+  -
+    id: C3-M6-COMPLETE-20260508T000129+0800
+    type: milestone
+    ref: M6
+    status: completed
+    timestamp: "2026-05-08T00:01:29+08:00"
+    summary: Completed M6 with motion tokens, reduced-motion fallback, lightweight send/message states, long-message render segmentation, and refresh Activity noise reduction.
+    report: .pipeline/reports/M6-motion-performance-events.md
+    trigger: workflow
+  -
+    id: C3-M5-COMPLETE-20260508T000129+0800
+    type: milestone
+    ref: M5
+    status: completed
+    timestamp: "2026-05-08T00:01:29+08:00"
+    summary: Completed M5 with compact desktop right rail, reachable mobile drawer navigation, brighter controls, clearer interaction hints, mobile keyboard handling, and expandable composer.
+    report: .pipeline/reports/M5-responsive-shell.md
+    trigger: workflow
+  -
+    id: C3-M4_5-HARDENING-20260507T233752+0800
+    type: audit_fix
+    ref: M4.5
+    status: completed
+    timestamp: "2026-05-07T23:37:52+08:00"
+    summary: "Completed audit-debt hardening before M5: optimistic outbound convergence, non-HTTP AppError redaction, explicit retry targets, SSE dedupe, and 429 cooldown retry semantics."
+    report: .pipeline/reports/M4.5-audit-debt-hardening.md
+    trigger: user
+  -
+    id: C3-M2-M4-SUBAGENT-AUDIT-20260507T231923+0800
+    type: audit
+    ref: C3-M2-M4
+    status: completed
+    timestamp: "2026-05-07T23:19:23+08:00"
+    summary: Completed independent Subagent audit of M2-M4 implementation; found two Critical issues around optimistic message lifecycle and non-HTTP error redaction, plus M5/M6 hardening warnings.
+    report: .pipeline/audits/audit-002.md
+    trigger: user
+  -
+    id: C3-M4-COMPLETE-20260507T225452+0800
+    type: milestone
+    ref: M4
+    status: completed
+    timestamp: "2026-05-07T22:54:52+08:00"
+    summary: Completed M4 with AppError protocol, server API error normalization/redaction, bottom error dock, retry actions, and focused 502/429/SSE Playwright coverage.
+    report: .pipeline/reports/M4-error-recovery.md
+    trigger: workflow
+  -
+    id: C3-M4-START-20260507T224615+0800
+    type: milestone
+    ref: M4
+    status: started
+    timestamp: "2026-05-07T22:46:15+08:00"
+    summary: Started M4 error cards, retry recovery, and graded error rendering.
+    trigger: workflow
+  -
+    id: C3-M3-COMPLETE-20260507T224546+0800
+    type: milestone
+    ref: M3
+    status: completed
+    timestamp: "2026-05-07T22:45:46+08:00"
+    summary: Completed M3 with persisted last-session selection, deterministic fallback, reasoning switch state machine, rollback, and backend capability validation.
+    report: .pipeline/reports/M3-session-reasoning.md
+    trigger: workflow
+  -
+    id: C3-M3-START-20260507T223410+0800
+    type: milestone
+    ref: M3
+    status: started
+    timestamp: "2026-05-07T22:34:10+08:00"
+    summary: Started M3 session selection and reasoning control reliability after completing message lifecycle/cache consistency fixes.
+    trigger: workflow
+  -
+    id: C3-M2-COMPLETE-20260507T223344+0800
+    type: milestone
+    ref: M2
+    status: completed
+    timestamp: "2026-05-07T22:33:44+08:00"
+    summary: Completed M2 with identity-scoped message merging, live-only refresh preservation, optimistic outbound messages, and frontend stale request guards.
+    report: .pipeline/reports/M2-message-lifecycle-cache-consistency.md
+    trigger: workflow
+  -
+    id: C3-M2-START-20260507T222705+0800
+    type: milestone
+    ref: M2
+    status: started
+    timestamp: "2026-05-07T22:27:05+08:00"
+    summary: Started M2 message lifecycle and cache consistency implementation to turn M1 expected-red tests green.
+    trigger: workflow
+  -
+    id: C3-M1-COMPLETE-20260507T222555+0800
+    type: milestone
+    ref: M1
+    status: completed
+    timestamp: "2026-05-07T22:25:55+08:00"
+    summary: Completed M1 with Chromium Playwright config, screenshot smoke tests, isolated E2E state, and four expected-red message lifecycle tests for M2.
+    report: .pipeline/reports/M1-playwright-red-baseline.md
+    trigger: workflow
+  -
+    id: C3-M1-START-20260507T221114+0800
+    type: milestone
+    ref: M1
+    status: started
+    timestamp: "2026-05-07T22:11:14+08:00"
+    summary: Started rebaselined M1 to add Chromium Playwright, screenshots, and message lifecycle red-light baseline.
+    trigger: user
+  -
+    id: C3-M0-PLAN-REVIEW-CONFIRMED-20260507T215825+0800
+    type: plan_review
+    ref: M0
+    status: applied
+    timestamp: "2026-05-07T21:58:25+08:00"
+    summary: User confirmed the post-M0 prompt patch queue; pending milestones were rebaselined to M1-M8 with new M2 message lifecycle/cache consistency and updated downstream prompts/state.
+    report: .pipeline/reports/M0-plan-review-confirmation.md
+    trigger: user
+  -
+    id: C3-M0-PLAN-REVIEW-20260507T215423+0800
+    type: plan_review
+    ref: M0
+    status: proposed
+    timestamp: "2026-05-07T21:54:23+08:00"
+    summary: Proposed post-M0 downstream prompt rebaseline based on supplemental audit and Subagent review; patch queue recommends M1 red-light expansion, new M2 message lifecycle/cache consistency, and shifting remaining pending milestones to M3-M8.
+    report: .pipeline/reports/M0-post-audit-plan-review.md
+    trigger: user
+  -
+    id: C3-M0-SUBAGENT-REVIEW-20260507T212546+0800
+    type: audit_review
+    ref: M0
+    status: completed
+    timestamp: "2026-05-07T21:25:46+08:00"
+    summary: Integrated Subagent review of the supplemental frontend cache/refresh audit; promoted server live-only message loss and frontend stale non-empty state overwrite to Critical findings.
+    report: .pipeline/reports/M0-subagent-review-of-supplemental-audit.md
+    trigger: workflow
+  -
+    id: C3-M0-SUPPLEMENTAL-AUDIT-20260507T211536+0800
+    type: audit
+    ref: M0
+    status: completed
+    timestamp: "2026-05-07T21:15:36+08:00"
+    summary: Added supplemental read-only audit focused on frontend refresh swallowing messages, cache/update strategy, optimistic outbound gaps, polling/SSE races, and rendering performance.
+    report: .pipeline/reports/M0-frontend-cache-refresh-performance-audit.md
+    trigger: user
+  -
+    id: C3-M0-COMPLETE-20260507T210739+0800
+    type: milestone
+    ref: M0
+    status: completed
+    timestamp: "2026-05-07T21:07:39+08:00"
+    summary: Completed C3 M0 full-stack audit, baseline validation, security review, and known bug root-cause matrix; stopped at the required post-M0 plan review gate.
+    report: .pipeline/reports/M0-audit.md
+    trigger: workflow
+  -
+    id: C3-POST-M0-GATE-20260507T210739+0800
+    type: plan_gate
+    ref: C3
+    status: blocked
+    timestamp: "2026-05-07T21:07:39+08:00"
+    summary: Post-M0 supplementary plan review is required before executing M1-M7.
+    report: .pipeline/reports/M0-known-bug-root-cause-matrix.md
+    trigger: workflow
+  -
+    id: C3-M0-START-20260507T210043+0800
+    type: milestone
+    ref: M0
+    status: started
+    timestamp: "2026-05-07T21:00:43+08:00"
+    summary: Started C3 M0 full-stack audit and known bug root-cause matrix.
+    trigger: user
+  -
     id: RELEASE-v0.2.1-20260507T195853+0800
     type: release
     ref: v0.2.1
@@ -111,7 +312,7 @@ entries:
     ref: M10
     status: manual_validation
     timestamp: "2026-05-06T14:01:40+08:00"
-    summary: Fixed M10 manual-QA UI issues: reduced live streaming flicker, constrained desktop statusbar widths, removed right Activity tab, changed completions to insert into draft text, and made Skill/File previews read real content through runtime-derived paths.
+    summary: "Fixed M10 manual-QA UI issues: reduced live streaming flicker, constrained desktop statusbar widths, removed right Activity tab, changed completions to insert into draft text, and made Skill/File previews read real content through runtime-derived paths."
     report: .pipeline/reports/m10-tmp-qa-harness-knowledge-finalization-and-acceptance-gate.md
     trigger: manual
   -

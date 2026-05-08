@@ -1,0 +1,25 @@
+status: complete
+next_action: "Optional human acceptance or remote release publication."
+reason: "C3 M7/M8 are complete; v0.3.0 is locally deployed and release-ready."
+updated_at: "2026-05-08T00:32:39+08:00"
+safe_resume_command: null
+context:
+  cycle: C3
+  completed_milestones:
+    - M5
+    - M6
+    - M7
+    - M8
+  next_milestone: null
+  required_command: null
+  reports:
+    - ".pipeline/reports/M5-responsive-shell.md"
+    - ".pipeline/reports/M6-motion-performance-events.md"
+    - ".pipeline/reports/M7-subagent-trace.md"
+    - ".pipeline/reports/M8-regression-and-closure.md"
+  validation:
+    - "npm run typecheck"
+    - "npm run test"
+    - "npm run e2e -- --project=chromium"
+    - "npm run screenshots -- --project=chromium"
+    - "npm run build"

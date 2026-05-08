@@ -1,182 +1,71 @@
-# Design Spec - VSP-Coder C2
+# Design Spec - VSP-Coder C3
 
-## Goal
+## 目标
 
-Build the full Codex adapter for VSP-Coder. C2 connects the C1 backend-owned
-message manager and UI contract to real Codex sessions through the official
-Codex app-server protocol, while refining the provider-independent VSP protocol
-for future OpenCode and Claude Code adapters.
+C3 是一次“审计优先”的体验质量专项。目标不是立刻分散修 Bug，而是先完成全栈代码审计，把用户已经观察到的痛点逐条解释清楚，再基于证据补充修复计划并推进实现。
 
-C2 is complete only when a real Codex thread can be discovered, started,
-resumed, streamed, interrupted, renamed, and tested end to end from the
-VSP-Coder frontend. The final acceptance path uses a disposable tmp project and
-manual user acceptance.
+本 Cycle 覆盖前端、后端、协议边界、持久化、本地启动部署脚本、测试、文档、安全、错误恢复、可扩展性和整体交互体验。前端动效不是局部补丁，而要形成统一、轻量、可验证、尊重 `prefers-reduced-motion` 的 motion system。
 
-## Project Shape
+## 已知 Bug 检查项
 
-- Project type: TypeScript web app plus Node.js backend daemon.
-- Primary deliverable: local web app and backend service with a real Codex
-  session adapter.
-- Target platform: desktop browser and mobile browser viewport.
-- Expected users: developer/operator managing local Codex coding sessions across
-  projects.
+审计完成后必须逐条解释下列问题的根因、影响面、修复入口和验证方式：
 
-## Hard Constraints
+- 前端默认加载到很老的会话。
+- 点击切换 `xhigh` 等 reasoning 档位很慢，并且有失败概率。
+- 发送动画明显卡顿。
+- PC 端口宽度不足时左侧 Project/session 列表不可见或不可达。
+- Subagent 识别不到，无法进入详情或交互。
+- 502、429 等错误没有被完整捕捉和渲染。
+- 前端动画效果缺少统一体系。
 
-- Browser clients never speak to Codex directly. They use VSP-Coder HTTP/SSE
-  APIs only.
-- VSP-Coder server is the single driver for each Codex thread. It owns queue,
-  steer, interrupt, approval responses, and session state fan-out.
-- Use `codex app-server` as the preferred official integration surface. Do not
-  scrape Codex TUI output.
-- Prefer internal `stdio://` or `unix://` app-server transport. Do not expose a
-  raw Codex WebSocket endpoint to browsers.
-- Do not implement browser Codex login, token management, or account switching
-  in C2. Reuse the current OS user's working Codex CLI environment.
-- Production code must not hardcode user paths. Apart from
-  disposable tmp QA fixtures, paths must come from Codex metadata, user
-  selection, instance config, environment variables, or runtime discovery.
-- Mock and tmp QA data are dev/test-only after C2 acceptance.
-- VSP-Coder local metadata must be generated per user/deployment under ignored
-  local state, such as `.vsp-coder/`.
-- Codex thread names are canonical in Codex storage. VSP-Coder may cache UI
-  metadata, but rename must call Codex and read back the stored name.
+## 用户决策
 
-## Functional Requirements
+- 执行顺序：先审计，再根据审计结果对照 Bug 列表解释问题，然后制定和补充修复计划。
+- M0 审计结束后已运行补充 Plan Review，并确认重排后续 Milestone；后续执行以 M1-M8 rebaseline 为准。
+- 默认会话策略：优先恢复用户上次选中的会话；不可恢复时再走确定性 fallback。
+- 错误体验：所有用户相关错误都必须渲染。前端使用底部错误小卡片和重试卡片。
+- 错误详情：错误卡片展示类型、HTTP 状态、用户说明、重试动作，以及可展开的脱敏技术详情。
+- 恢复策略：按错误类型分级，例如 429 冷却后重试，502/SSE 断开支持重连，发送失败保留草稿和队列上下文。
+- 浏览器验证主线：Chromium。Firefox/WebKit 可作为后续 smoke，不阻塞主线。
+- 实现与审计/验证分开，采用 `worker_separation.mode=recommended`。
 
-### Instance Configuration And Automation Profiles
+## 验证策略
 
-- Add gitignored local instance config for deployment mode and defaults.
-- Support at least three automation profiles:
-  - Full automation: `approvalPolicy=never`, `sandbox=danger-full-access`.
-  - Workspace automation: less permissive approvals, `sandbox=workspace-write`.
-  - Manual confirmation: approval/user-input requests route to frontend cards.
-- Local deployment defaults to full automation with `danger-full-access`.
-- Published/deployed builds expose real settings for automation level. The
-  frontend and backend must agree on the selected profile.
-- Session header or settings surfaces must show the active approval/sandbox
-  profile.
+自动化验证是主线，至少包括：
 
-### Codex Process And Protocol Client
+- `npm run typecheck`
+- `npm run test`
+- `npm run build`
+- `npm run e2e -- --project=chromium`
+- `npm run screenshots -- --project=chromium`
 
-- VSP-Coder server starts and supervises a local `codex app-server` child
-  process on demand.
-- Implement a typed JSON-RPC client around generated app-server TypeScript/schema
-  artifacts.
-- Surface app-server health, startup failure, disconnect, reconnect/restart, and
-  protocol errors to the VSP event stream.
+Playwright 和截图检查需要覆盖：
 
-### Project And Session Discovery
+- 上次选中会话恢复。
+- reasoning 切换成功、失败、回滚、重试。
+- 502、429、SSE 断开、发送失败等错误卡片。
+- Subagent trace 识别和详情打开。
+- Project/session 导航在 `1440x900`、`1280x800`、`1024x768`、`768x900`、`390x844` 下可达。
+- 发送、面板切换、列表展开、加载态、错误态的动效关键状态。
 
-- Use Codex `thread/list`, `thread/read`, and `thread/resume` metadata, especially
-  `cwd`, to discover real projects and sessions.
-- The default homepage after C2 acceptance shows Codex-derived projects and
-  sessions, not mock project fixtures.
-- If no Codex history exists, show an empty state that can open a local directory
-  and create a new Codex thread with that `cwd`.
-- Before final C2 acceptance, only tmp QA threads may be mutated. Existing user
-  Codex history may be listed/read but must not be renamed, archived, or written
-  by the acceptance flow.
+## Milestone 策略
 
-### Real Thread And Turn Flow
+C3 拆为 8 个 Milestone：
 
-- Start new Codex threads with selected `cwd`, model/reasoning, approval policy,
-  sandbox, and reviewer profile.
-- Resume existing Codex threads and load turns/messages through the backend.
-- All frontend messages enter the VSP-Coder server queue. The server chooses
-  `turn/start`, `turn/steer`, or pending queue behavior based on Codex thread
-  state.
-- Only one active turn may drive a single Codex thread at a time. Different
-  threads may run independently.
-- Stream assistant deltas, completed items, status changes, warnings, errors,
-  token usage, and rate-limit updates into the VSP protocol.
+1. M0 全栈审计与已知 Bug 根因矩阵。
+2. M1 Chromium Playwright、截图与消息生命周期红灯基线。
+3. M2 消息生命周期与缓存一致性。
+4. M3 会话选择与 reasoning 控制面可靠性。
+5. M4 错误事件、底部错误卡片与分级恢复。
+6. M5 响应式工作台外壳与导航可达性。
+7. M6 统一前端动效体系、发送性能与事件降噪。
+8. M7 Subagent trace 识别、详情与交互入口。
+9. M8 全量回归、扩展性硬化与文档同步。
 
-### Requests, Approvals, And User Input
+## 非目标
 
-- Map Codex command execution approvals, file change approvals, permission
-  requests, tool user-input requests, MCP elicitations, and compatibility
-  approval requests into VSP `RequestCard` objects.
-- Manual profile shows frontend approval cards and routes responses back to Codex.
-- Full automation profile should not block normal local operation on frontend
-  approval cards.
-- Keep an audit/event trail for request cards, decisions, and provider errors.
-
-### Files, Commands, Diffs, And Preview
-
-- Show command execution status and output summaries.
-- Show file change cards and changed file/diff preview entries.
-- Preserve safe project-root confinement for VSP preview/file APIs.
-- C2 does not need a full terminal emulator or rich diff editor.
-
-### Rename And Persistence
-
-- Implement real Codex rename through the app-server thread name API.
-- The frontend rename flow must refresh canonical data from Codex.
-- Rename acceptance must prove the new name persists across frontend refresh and
-  VSP-Coder server restart, equivalent to Codex CLI `/rename`.
-
-### Knowledge Capture
-
-- Update knowledge during each Milestone with provider protocol decisions,
-  method/event mappings, request-card mappings, rename behavior, tmp QA limits,
-  and known pitfalls.
-- Final C2 must include:
-  - `.pipeline/knowledge/reference/vsp-provider-protocol.md`
-  - `.pipeline/knowledge/reference/codex-adapter-mapping.md`
-
-## Testing Expectations
-
-### Automated
-
-- Typecheck/build/test across workspaces.
-- Unit tests for instance config, profile mapping, and path hardcode prevention.
-- JSON-RPC client tests for request/response/notification plumbing.
-- Adapter mapping tests from Codex fixtures to VSP messages/events/cards.
-- Backend API tests for discovery, queue behavior, rename request routing, and
-  tmp fixture generation.
-
-### Manual
-
-- Each Milestone includes a focused manual check.
-- Final acceptance uses a disposable tmp fixture project.
-- The user manually follows the QA script from the frontend:
-  - set automation profile;
-  - inspect real Codex project/session discovery;
-  - create a tmp Codex thread;
-  - send a small coding prompt;
-  - exercise command approval and file change approval;
-  - inspect streaming output, changed file preview, token/rate status;
-  - interrupt and verify queue behavior;
-  - rename the thread and verify persistence across refresh/restart;
-  - input `accept`.
-
-## Milestone Strategy
-
-- Proposed milestone count: 10.
-- Expected preset: `tdd`.
-- Split rationale: first remove C1 demo assumptions and make deployment/profile
-  state real, then build the Codex transport, then layer discovery, turns,
-  events, approvals, files, controls, rename, and final QA.
-
-## C2 Milestones
-
-1. Configuration, Automation Profiles, And No-Hardcode Baseline
-2. Codex App-Server Client Foundation
-3. Codex Thread And Project Discovery
-4. Thread Start, Resume, Queue, And Steer
-5. Streaming, Event, And Metric Mapping
-6. Approval And Automation Strategy
-7. File Changes, Command Output, And Preview
-8. Interrupt, Queue Controls, And Error Recovery
-9. Rename And Persistence Verification
-10. Tmp QA Harness, Knowledge Finalization, And Acceptance Gate
-
-## Non-Goals
-
-- Multi-user remote runner orchestration.
-- Browser-based Codex login or account/token management.
-- OpenCode or Claude Code adapters.
-- Full policy engine.
-- Electron or VSCode shell.
-- Rich diff editor.
-- Full terminal emulator.
+- 不在 M0 直接修业务代码。
+- 不把 Firefox/WebKit 作为主线阻塞项。
+- 不引入全新的前端框架或大型动效库，除非审计证明现有方案无法满足性能与维护性。
+- 不把错误详情中的 token、敏感 header、用户私密路径直接暴露到 UI。
+- 不重写 provider 架构；优先在现有 VSP protocol/provider adapter 边界上演进。

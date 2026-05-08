@@ -2,4 +2,6 @@ node_modules/
 dist/
 .vite/
 .vsp-coder/
+test-results/
+playwright-report/
 *.log

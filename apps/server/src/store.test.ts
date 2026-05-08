@@ -48,6 +48,21 @@ test("automation profile ids stay stable for frontend settings", () => {
   assert.deepEqual(automationProfiles.map((profile) => profile.id), ["full_auto", "workspace_auto", "manual"]);
 });
 
+test("refresh activity events are coalesced instead of filling persistent activity", () => {
+  const store = new MockStore();
+  store.updateConfig({ deploymentMode: "local", dataMode: "dev-test", automationProfile: "full_auto" });
+  const session = store.snapshot().sessions.find((item) => item.id === "mock-main");
+  assert.ok(session);
+
+  store.recordEvent({ sessionId: session.id, projectId: session.projectId, type: "session_updated", message: "状态已刷新。" });
+  store.recordEvent({ sessionId: session.id, projectId: session.projectId, type: "session_updated", message: "状态已刷新。" });
+
+  const matching = store.snapshot().events.filter((event) =>
+    event.sessionId === session.id && event.type === "session_updated" && event.message === "状态已刷新。"
+  );
+  assert.equal(matching.length, 1);
+});
+
 test("production source avoids hardcoded local user paths", () => {
   const forbidden = `/home/${"heyx"}`;
   const files = [

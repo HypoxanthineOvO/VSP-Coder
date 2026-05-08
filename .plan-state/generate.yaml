@@ -2,37 +2,38 @@ phase: P3-generate
 language: zh-CN
 project: VSP-Coder
 cycle:
-  id: C2
-  name: Codex Session Adapter
-workflow_kind: build
+  id: C3
+  name: "我准备全面审计代码，进行体验优化和功能补充"
+status: regenerated
+updated_at: "2026-05-07T21:58:25+08:00"
+mode: append_or_revise
 preset: tdd
-status: generated
-generated_at: "2026-05-05T00:00:00+08:00"
-artifacts:
-  design_spec: .pipeline/design-spec.md
-  architecture: .pipeline/architecture.md
-  progress: .pipeline/PROGRESS.md
-  plan_state:
-    - .plan-state/discover.yaml
-    - .plan-state/decompose.yaml
-    - .plan-state/generate.yaml
-  prompts:
-    - .pipeline/prompts/01-configuration-automation-profiles-and-no-hardcode-baseline.md
-    - .pipeline/prompts/02-codex-app-server-client-foundation.md
-    - .pipeline/prompts/03-codex-thread-and-project-discovery.md
-    - .pipeline/prompts/04-thread-start-resume-queue-and-steer.md
-    - .pipeline/prompts/05-streaming-event-and-metric-mapping.md
-    - .pipeline/prompts/06-approval-and-automation-strategy.md
-    - .pipeline/prompts/07-file-changes-command-output-and-preview.md
-    - .pipeline/prompts/08-interrupt-queue-controls-and-error-recovery.md
-    - .pipeline/prompts/09-rename-and-persistence-verification.md
-    - .pipeline/prompts/10-tmp-qa-harness-knowledge-finalization-and-acceptance-gate.md
-  knowledge:
-    - .pipeline/knowledge/reference/vsp-provider-protocol.md
-    - .pipeline/knowledge/reference/codex-adapter-mapping.md
-  report: .pipeline/reports/c2-plan-generated.md
-protected_files_not_modified:
-  - .pipeline/state.yaml
-  - .pipeline/cycle.yaml
-  - .pipeline/rules.yaml
-next_phase: P4-confirm
+workflow_kind: build
+worker_separation:
+  mode: recommended
+generated_files:
+  - ".pipeline/config.yaml"
+  - ".pipeline/state.yaml"
+  - ".pipeline/design-spec.md"
+  - ".pipeline/architecture.md"
+  - ".pipeline/prompts/00-audit-root-cause-matrix.md"
+  - ".pipeline/prompts/01-playwright-screenshot-baseline.md"
+  - ".pipeline/prompts/02-message-lifecycle-cache-consistency.md"
+  - ".pipeline/prompts/03-session-reasoning-reliability.md"
+  - ".pipeline/prompts/04-error-cards-retry-recovery.md"
+  - ".pipeline/prompts/05-responsive-shell-navigation.md"
+  - ".pipeline/prompts/06-motion-system-send-performance.md"
+  - ".pipeline/prompts/07-subagent-trace-interaction.md"
+  - ".pipeline/prompts/08-regression-hardening-docs.md"
+milestone_count: 9
+test_point_count: 5
+validation_commands:
+  - "npm run typecheck"
+  - "npm run test"
+  - "npm run build"
+  - "npm run e2e -- --project=chromium"
+  - "npm run screenshots -- --project=chromium"
+post_m0_gate:
+  required: false
+  action: "Post-M0 Plan Review confirmed and applied; ready to execute rebaselined M1."
+  applied_at: "2026-05-07T21:58:25+08:00"

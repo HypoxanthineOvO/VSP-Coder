@@ -1,13 +1,13 @@
 # VSP-Coder
 
-![版本](https://img.shields.io/badge/version-v0.2.1-1f6feb)
+![版本](https://img.shields.io/badge/version-v0.3.0-1f6feb)
 ![许可证](https://img.shields.io/badge/license-AGPL--3.0--or--later-2da44e)
 ![Node.js](https://img.shields.io/badge/Node.js-20%2B-43853d)
 ![状态](https://img.shields.io/badge/status-Codex%20adapter%20ready-8250df)
 
 VSP-Coder 是一个本地 Codex 工作台，用来在多个项目之间监督真实 Codex 编码会话、历史记录、待发送队列、审批、模型选择、产物预览和 Hypo-Workflow 项目状态。
 
-当前版本：`v0.2.1`
+当前版本：`v0.3.0`
 
 ## 适合谁
 
@@ -25,6 +25,9 @@ VSP-Coder 是一个本地 Codex 工作台，用来在多个项目之间监督真
 | 产物预览 | 展示命令输出、文件变更、Markdown、表格、安全 HTML 和数学公式。 |
 | 自动化档位 | 支持本地 full-auto、workspace-auto 和 manual confirmation。 |
 | Workflow 面板 | 展示 Hypo-Workflow 进度、compact plan、配置、architecture 和 knowledge 入口。 |
+| 稳定消息流 | 刷新、轮询和 SSE live patch 会按消息 identity 合并，避免刷新吞掉已发送消息。 |
+| 错误恢复 | 502、429、SSE 断开、发送失败和 refresh 失败会渲染到底部错误卡，并提供可用的重试入口。 |
+| 响应式与动效 | 窄屏桌面、移动端软键盘、长输入 composer、统一 motion token 和 reduced-motion 都有回归覆盖。 |
 
 ## 快速开始
 
@@ -74,6 +77,8 @@ npm run deploy:local -- --no-build
 - 顶部状态栏用于切换 Codex 模型、reasoning 强度和简单/详细工具展示。
 - 右侧栏用于查看 Workflow、Artifacts、Skill/Command 预览和 Settings。
 - 移动端会把导航、模型选择和待审批项压缩为更适合小屏的菜单与底部抽屉。
+- 默认进入上次选中的项目和会话；如果目标失效，会回退到当前可用会话并保留可解释的 fallback。
+- 简单模式会隐藏普通工具噪音，但保留 Subagent trace 入口；详细模式可查看原始 trace、状态、provider 交互能力和不可交互原因。
 
 ## 项目结构
 
@@ -120,7 +125,7 @@ npm run deploy:local -- --no-build
 
 ## 发布状态
 
-`v0.2.1` 是文档中文化、README 美化、AGPL 许可证和规则同步发布。`v0.2.0` 是已接受的 C2 Codex Session Adapter 发布；OpenCode 和 Claude Code 仍是未来 provider adapter，当前共享协议和知识记录已为后续集成预留。
+`v0.3.0` 是 C3 体验与可靠性发布：修复消息刷新吞失、旧会话默认进入、reasoning 切换失败、错误不可见、窄屏导航不可达、发送动画卡顿和 Subagent trace 不可见等问题。`v0.2.1` 是文档中文化、README 美化、AGPL 许可证和规则同步发布；OpenCode 和 Claude Code 仍是未来 provider adapter，当前共享协议和知识记录已为后续集成预留。
 
 ## 许可证
 

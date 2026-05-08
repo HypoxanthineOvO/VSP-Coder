@@ -1,0 +1,19 @@
+verdict: pass
+reviewed_refs:
+  - "package.json"
+  - "package-lock.json"
+  - ".gitignore"
+  - "playwright.config.ts"
+  - "e2e/workbench.spec.ts"
+  - "e2e/message-lifecycle-red.spec.ts"
+  - "apps/web/src/sessionMerge.ts"
+  - "apps/web/src/main.tsx"
+  - "apps/server/src/store.ts"
+checked_rules:
+  - "No port-kill or unsafe service restart pattern introduced."
+  - "Default store path behavior remains unchanged unless VSP_CODER_STATE_DIR is set."
+  - "M1 extracted frontend merge logic for testability without intentionally fixing M2 behavior."
+  - "Generated screenshot and HTML report directories are ignored."
+issues: []
+retry_round: 0
+fallback_reason: null

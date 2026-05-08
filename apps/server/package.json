@@ -1,6 +1,6 @@
 {
   "name": "@vsp-coder/server",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "test": "npm run build && node --test dist/*.test.js"
   },
   "dependencies": {
-    "@vsp-coder/protocol": "0.2.1"
+    "@vsp-coder/protocol": "0.3.0"
   },
   "devDependencies": {
     "tsx": "^4.20.6",

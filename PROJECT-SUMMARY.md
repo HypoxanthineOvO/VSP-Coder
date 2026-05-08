@@ -1,10 +1,10 @@
 # VSP-Coder
 
-本文件是 Hypo-Workflow 生成的项目摘要。请编辑 `.pipeline/` 下的 authority 文件，然后运行 `/hw:sync --repair` 重新生成派生视图。
+This file is a generated Hypo-Workflow project summary. Edit authority files under `.pipeline/`, then run `/hw:sync --repair`.
 
-- Pipeline 状态：unknown
-- Cycle：n/a
-- Current：n/a
-- Step：n/a
-- Progress：n/a/n/a
-- 进度说明：见 `.pipeline/PROGRESS.md`
+- Pipeline status: completed
+- Cycle: 3
+- Current: 全量回归、扩展性硬化与文档同步
+- Step: completed
+- Progress: 9/9
+- Progress note: VSP-Coder C3 进度

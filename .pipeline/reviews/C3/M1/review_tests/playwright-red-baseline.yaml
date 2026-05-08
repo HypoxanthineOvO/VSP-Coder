@@ -1,0 +1,14 @@
+verdict: pass
+reviewed_refs:
+  - ".pipeline/prompts/01-playwright-screenshot-baseline.md"
+  - "playwright.config.ts"
+  - "e2e/workbench.spec.ts"
+  - "e2e/message-lifecycle-red.spec.ts"
+checked_rules:
+  - "Chromium-only Playwright baseline exists."
+  - "Screenshots cover 1440x900, 1280x800, 1024x768, 768x900, 390x844."
+  - "Message lifecycle red tests are marked expected-red and mapped to M2."
+  - "E2E state is isolated via VSP_CODER_STATE_DIR."
+issues: []
+retry_round: 0
+fallback_reason: null

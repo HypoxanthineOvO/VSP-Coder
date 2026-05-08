@@ -1,0 +1,25 @@
+cycle: C3
+milestone: M2
+kind: review_code
+status: pass
+timestamp: "2026-05-07T22:33:44+08:00"
+summary: >
+  Code review focused on message identity reconciliation, optimistic outbound insertion,
+  and frontend request ordering. The content-based dedupe path was removed from the
+  affected server and web merge layers, and queue items now have paired user messages.
+checks:
+  - id: provider-refresh-live-only
+    status: pass
+    note: mergeProviderRefresh preserves previous messages absent from provider refresh.
+  - id: identity-scoped-merge
+    status: pass
+    note: server and web merges use id/providerItemRef instead of role/text content.
+  - id: optimistic-queue-message
+    status: pass
+    note: enqueuePendingMessage creates a visible user message using the queue item id.
+  - id: request-ordering
+    status: pass
+    note: frontend state/detail requests reject stale detail responses and ignore superseded state refreshes.
+residual_risks:
+  - Error rendering/retry behavior is intentionally deferred to M4.
+  - Motion/rendering performance is intentionally deferred to M6.

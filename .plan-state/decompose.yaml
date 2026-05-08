@@ -2,128 +2,158 @@ phase: P2-decompose
 language: zh-CN
 project: VSP-Coder
 cycle:
-  id: C2
-  name: Codex Session Adapter
-  workflow_kind: build
-  preset: tdd
+  id: C3
+  name: "我准备全面审计代码，进行体验优化和功能补充"
 status: confirmed
+updated_at: "2026-05-07T21:58:25+08:00"
+rebaseline:
+  source: "C3 M0 post-audit plan-review"
+  confirmed_at: "2026-05-07T21:58:25+08:00"
+  summary: "Pending milestones were rebaselined from M1-M7 to M1-M8 after supplemental message lifecycle/cache audit."
+worker_separation:
+  mode: recommended
+  rationale: "实现和审计/验证分开；自动化验证为主，不为每个小改强制严格隔离。"
+browser_validation:
+  primary: chromium
+  optional_smoke:
+    - firefox
+    - webkit
+viewport_matrix:
+  - 1440x900
+  - 1280x800
+  - 1024x768
+  - 768x900
+  - 390x844
+global_validation_commands:
+  - "npm run typecheck"
+  - "npm run test"
+  - "npm run build"
+  - "npm run e2e -- --project=chromium"
+  - "npm run screenshots -- --project=chromium"
 milestones:
-  - id: M01
-    name: Configuration, Automation Profiles, And No-Hardcode Baseline
-    objective: >
-      Create the real instance configuration path, make automation profiles
-      frontend/backend consistent, remove production hardcoded user paths, and
-      isolate mock/tmp data behind dev/test mode.
-    validation:
-      - Local ignored config controls deployment mode and default profile.
-      - Frontend settings can switch available automation profiles.
-      - Backend persists and applies the selected profile.
-      - Production code no longer hardcodes /home/heyx or fixed demo projects.
-      - Mock/tmp sessions are visible only in dev/test mode.
-
-  - id: M02
-    name: Codex App-Server Client Foundation
-    objective: >
-      Add Codex app-server process management and a typed JSON-RPC client based
-      on generated schema artifacts.
-    validation:
-      - Backend can start/connect to codex app-server.
-      - Health, startup failure, disconnect, and restart states are visible.
-      - Tests cover JSON-RPC request/response/notification plumbing.
-
-  - id: M03
-    name: Codex Thread And Project Discovery
-    objective: >
-      Replace mock-default discovery with Codex thread/project discovery using
-      thread list/read/resume metadata, especially cwd.
-    validation:
-      - Existing Codex sessions can be listed without mutation.
-      - Projects are aggregated from real thread cwd values.
-      - Empty state supports opening a local directory for a new thread.
-      - Before acceptance, non-tmp threads are read-only.
-
-  - id: M04
-    name: Thread Start, Resume, Queue, And Steer
-    objective: >
-      Start and resume real Codex threads and route all frontend messages through
-      the VSP server queue into turn/start or turn/steer.
-    validation:
-      - Tmp project can create a real Codex thread.
-      - Resumed threads load canonical Codex messages/turns.
-      - One thread has at most one active turn; extra messages queue safely.
-
-  - id: M05
-    name: Streaming, Event, And Metric Mapping
-    objective: >
-      Map Codex deltas, completed items, status changes, warnings, errors,
-      token usage, and rate-limit updates into the VSP protocol.
-    validation:
-      - Frontend streams real assistant output.
-      - Status, error, token, and rate-limit surfaces update from Codex events.
-      - Knowledge documents the evolving VSP provider protocol and Codex mapping.
-
-  - id: M06
-    name: Approval And Automation Strategy
-    objective: >
-      Map Codex server requests into VSP request cards and make automation
-      profiles materially affect request routing.
-    validation:
-      - Manual profile shows command and file-change approval cards.
-      - Full automation profile does not require frontend approval for normal
-        local operation.
-      - Permission, tool user-input, and MCP elicitation mappings are covered.
-
-  - id: M07
-    name: File Changes, Command Output, And Preview
-    objective: >
-      Surface command output summaries, changed files, diffs, and preview targets
-      from real Codex turns.
-    validation:
-      - Tmp prompt produces visible command result and file change preview.
-      - Safe file preview remains project-root confined.
-      - Full terminal and rich diff editor remain deferred.
-
-  - id: M08
-    name: Interrupt, Queue Controls, And Error Recovery
-    objective: >
-      Connect interrupt, pending queue controls, app-server crash recovery, and
-      multi-window state synchronization for real Codex sessions.
-    validation:
-      - turn/interrupt works from the frontend.
-      - Clear queue affects pending VSP messages only.
-      - app-server restart/disconnect produces understandable UI state.
-
-  - id: M09
-    name: Rename And Persistence Verification
-    objective: >
-      Implement real Codex thread rename and verify canonical persistence across
-      refresh and VSP server restart.
-    validation:
-      - Rename calls Codex thread/name/set.
-      - VSP refreshes the canonical name from Codex.
-      - Tmp thread name survives browser refresh and server restart.
-
-  - id: M10
-    name: Tmp QA Harness, Knowledge Finalization, And Acceptance Gate
-    objective: >
-      Package disposable tmp QA, final manual test script, knowledge protocol
-      docs, and the explicit user accept gate for C2.
-    validation:
-      - Tmp fixture is generated and isolated.
-      - Manual QA script covers the full C2 acceptance chain.
-      - Final protocol and adapter mapping docs are complete.
-      - User accepts or rejects C2 explicitly.
-test_strategy:
-  automated:
-    - typecheck/build/test across workspaces
-    - config/profile mapping tests
-    - no-hardcoded-user-path checks
-    - Codex JSON-RPC client plumbing tests
-    - adapter mapping fixture tests
-    - queue/rename/discovery backend tests
-  manual:
-    - focused check after each Milestone
-    - final tmp-project Codex walkthrough before accept
-status_notes:
-  confirmed_by_user: true
-  p3_ready: true
+  - id: M0
+    name: "全栈审计与已知 Bug 根因矩阵"
+    kind: analysis
+    objective: "完成前端、后端、协议、持久化、测试、脚本、文档、安全和可扩展性的系统审计，并在补充审计中覆盖消息生命周期/cache/performance。"
+    implementation_scope:
+      - "不改业务代码，读取并标注证据。"
+      - "逐条解释 known bugs 和补充消息生命周期问题的根因、影响面、风险和推荐修复顺序。"
+      - "输出审计报告、风险分级、修复计划和验证缺口。"
+    artifacts:
+      - ".pipeline/reports/M0-audit.md"
+      - ".pipeline/reports/M0-known-bug-root-cause-matrix.md"
+      - ".pipeline/reports/M0-frontend-cache-refresh-performance-audit.md"
+      - ".pipeline/reports/M0-subagent-review-of-supplemental-audit.md"
+      - ".pipeline/reports/M0-post-audit-plan-review.md"
+    status: complete
+  - id: M1
+    name: "Chromium Playwright、截图与消息生命周期红灯基线"
+    kind: test_infra
+    objective: "建立自动化验证闭环和消息生命周期红灯套件，使后续体验修复能被 E2E、截图和 targeted tests 捕捉。"
+    implementation_scope:
+      - "新增 Chromium Playwright 配置、测试脚本和本地 server/web 启动策略。"
+      - "覆盖核心 UI 场景、多视口截图和消息生命周期红灯测试。"
+      - "红灯测试覆盖重复消息、send-then-refresh、server live-only preservation、stale state/detail、queue 主消息流、SSE onerror、refresh 噪音和 500+ message baseline。"
+    closed_loop_validation:
+      command: "npm run test && npm run e2e -- --project=chromium && npm run screenshots -- --project=chromium"
+      evidence: "Playwright 通过日志、截图产物、红灯矩阵和后续修复入口。"
+      validator: "测试/审计视角维护场景。"
+    prompt_file: ".pipeline/prompts/01-playwright-screenshot-baseline.md"
+  - id: M2
+    name: "消息生命周期与缓存一致性"
+    kind: implementation
+    objective: "修复刷新吞消息、重复消息丢失、缺少 optimistic outbound、server/provider refresh 覆盖 live-only messages、前端 stale response 落地和 queue 收敛问题。"
+    implementation_scope:
+      - "引入 outbound identity。"
+      - "实现 optimistic user message 和 pending outbound 主消息流可见。"
+      - "改造 providerItemRef/id-first merge，并限制内容去重范围。"
+      - "修复 mergeProviderRefresh live-only message preservation。"
+      - "增加 freshness metadata/request generation/AbortController。"
+      - "定义 queue pending/sent/confirmed/failed/cleared 收敛。"
+    closed_loop_validation:
+      command: "npm run test && npm run e2e -- --project=chromium --grep \"message|refresh|queue|cache\""
+      evidence: "M1 红灯矩阵对应项转绿。"
+      validator: "审计/验证视角复核 identity、merge 和 queue 状态。"
+    prompt_file: ".pipeline/prompts/02-message-lifecycle-cache-consistency.md"
+  - id: M3
+    name: "会话选择与 reasoning 控制面可靠性"
+    kind: implementation
+    objective: "修复默认进入旧会话和 reasoning/xhigh 切换慢、失败不可见、状态污染的问题。"
+    implementation_scope:
+      - "持久化上次选中的 project/session，并提供可解释 fallback。"
+      - "重构 model/reasoning switch pending/success/failed/rollback/retry 状态机。"
+      - "复用 M2 freshness primitives，不重新设计消息缓存层。"
+    closed_loop_validation:
+      command: "npm run test && npm run e2e -- --project=chromium --grep \"session|reasoning\""
+      evidence: "刷新恢复和 reasoning failure rollback 通过。"
+      validator: "审计/验证视角复核状态机和失败路径。"
+    prompt_file: ".pipeline/prompts/03-session-reasoning-reliability.md"
+  - id: M4
+    name: "错误事件、底部错误卡片与分级恢复"
+    kind: implementation
+    objective: "让 HTTP、SSE、provider、queue、refresh 和发送错误全部渲染为可理解、可恢复的 UI。"
+    implementation_scope:
+      - "定义统一错误模型和 retry target。"
+      - "规范化 502、429、5xx、SSE、provider、refresh 和发送错误。"
+      - "新增底部错误卡片和重试卡片，并按错误类型分级恢复。"
+      - "脱敏技术详情。"
+    closed_loop_validation:
+      command: "npm run test && npm run e2e -- --project=chromium --grep \"error|retry\""
+      evidence: "所有注入错误均在 UI 渲染并可按类型恢复。"
+      validator: "独立审计视角复核错误传播和信息泄漏。"
+    prompt_file: ".pipeline/prompts/04-error-cards-retry-recovery.md"
+  - id: M5
+    name: "响应式工作台外壳与导航可达性"
+    kind: implementation
+    objective: "修复 PC 窄宽度时 Project/session 导航消失或不可达的问题。"
+    implementation_scope:
+      - "重构 grid/rail 宽度约束、collapse 策略、resize handle、desktop/mobile 边界。"
+      - "保证 Project/session 入口在视口矩阵下可见或可一键打开。"
+      - "处理右侧面板、状态栏、composer、错误卡片和 pending message 的优先级与遮挡。"
+    closed_loop_validation:
+      command: "npm run screenshots -- --project=chromium --grep \"responsive|shell\""
+      evidence: "各视口截图中导航可达，主会话和 composer 不被遮挡。"
+      validator: "测试/审计视角做截图 diff 和可达性检查。"
+    prompt_file: ".pipeline/prompts/05-responsive-shell-navigation.md"
+  - id: M6
+    name: "统一前端动效体系、发送性能与事件降噪"
+    kind: implementation
+    objective: "建立一致、轻量、尊重 reduced-motion 的 motion system，并解决发送卡顿、长会话渲染风险和 refresh event 噪音。"
+    implementation_scope:
+      - "抽取 motion tokens 并替换高成本动画。"
+      - "优化发送、消息状态、面板、列表、错误卡片和 reduced-motion。"
+      - "基于 M1 性能基线做消息渲染 memoization/segmentation/折叠策略。"
+      - "降低 refresh event 持久化和 Activity/SSE 噪音。"
+    closed_loop_validation:
+      command: "npm run e2e -- --project=chromium --grep \"motion|send|performance|activity\" && npm run screenshots -- --project=chromium --grep \"motion\""
+      evidence: "发送不卡顿、布局不跳、refresh 噪音降低、reduced-motion 生效。"
+      validator: "审计/验证视角复核 CSS、性能和事件噪音。"
+    prompt_file: ".pipeline/prompts/06-motion-system-send-performance.md"
+  - id: M7
+    name: "Subagent trace 识别、详情与交互入口"
+    kind: implementation
+    objective: "修复 Subagent 识别不到、无法进入详情或交互的问题，并使协议边界更可扩展。"
+    implementation_scope:
+      - "审计 Codex subagent/tool item 真实形状。"
+      - "扩展或约束结构化 Subagent trace 协议。"
+      - "服务端转换结构化 trace，前端提供详情和交互入口。"
+      - "simple display mode 下仍可见入口。"
+    closed_loop_validation:
+      command: "npm run test && npm run e2e -- --project=chromium --grep \"subagent\""
+      evidence: "结构化 Subagent 数据端到端可见，详情打开稳定。"
+      validator: "独立审计视角复核 provider 边界和向后兼容。"
+    prompt_file: ".pipeline/prompts/07-subagent-trace-interaction.md"
+  - id: M8
+    name: "全量回归、扩展性硬化与文档同步"
+    kind: hardening
+    objective: "对照 M0 原始矩阵和补充审计逐项关闭，完成全量回归、扩展性硬化和中文文档同步。"
+    implementation_scope:
+      - "标记 original known bugs 和 supplemental findings 的 fixed/deferred/accepted risk。"
+      - "修复低风险低成本问题。"
+      - "检查 provider adapter、协议、错误模型、测试夹具、脚本和文档可扩展性。"
+      - "更新中文文档。"
+    closed_loop_validation:
+      command: "npm run qa && npm run e2e -- --project=chromium && npm run screenshots -- --project=chromium"
+      evidence: "全量命令通过；每项问题有关闭证据或明确 deferred 说明。"
+      validator: "最终审计/验证视角签收。"
+    prompt_file: ".pipeline/prompts/08-regression-hardening-docs.md"
